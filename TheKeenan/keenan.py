@@ -34,6 +34,7 @@ from .standardization import standardize, standardize_ivar
 class Keenan(object):
     """ This defines Keenan class """
     # training data
+    wave = None
     tr_flux = None
     tr_ivar = None
     tr_labels = None
@@ -52,11 +53,13 @@ class Keenan(object):
     svrs = []
     trained = False
 
-    def __init__(self, tr_flux, tr_ivar, tr_labels, scale=True):
+    def __init__(self, wave, tr_flux, tr_ivar, tr_labels, scale=True):
         """ initialize the Keenan instance with tr_flux, tr_ivar, tr_labels
 
         Parameters
         ----------
+        wave: 1D ndarray
+            spectral wavelength
         tr_flux: ndarray with a shape of (n_obs x n_pix)
             training flux (RV-corrected, normalized)
         tr_ivar: ndarray with a shape of (n_obs x n_pix)
@@ -73,12 +76,13 @@ class Keenan(object):
         # input data assertions
         try:
             # assert input data are 2-d np.ndarray
+            assert isinstance(wave, np.ndarray) and wave.ndim == 1
             assert isinstance(tr_flux, np.ndarray) and tr_flux.ndim == 2
             assert isinstance(tr_ivar, np.ndarray) and tr_ivar.ndim == 2
             assert isinstance(tr_labels, np.ndarray) and tr_labels.ndim == 2
 
             # assert input data shape consistency
-            tr_flux.shape == tr_ivar.shape
+            assert tr_flux.shape == tr_ivar.shape
             assert tr_flux.shape[0] == tr_labels.shape[0]
 
         except:
@@ -161,20 +165,17 @@ class Keenan(object):
         *args, **kwargs:
             extra parameters are passed to joblib.dump()
 
-        Returns
-        -------
-        the dump file path
-
         """
         # check file existence
         if os.path.exists(filepath) and not overwrite:
             raise (IOError("@Keenan: file exists! [%s]" % filepath))
         else:
             # the joblib.dump() will overwrite file in default
-            return dump(self, filepath, *args, **kwargs)
+            dump(self, filepath, *args, **kwargs)
+            return
 
     @classmethod
-    def load_dump(self, filepath):
+    def load_dump(cls, filepath):
         """ load Keenan instance from dump file
 
         Parameters
@@ -184,7 +185,11 @@ class Keenan(object):
 
         Returns
         -------
+        Keenan instance / arbitrary python object
 
+        Example
+        -------
+        >>> k = Keenan.load_dump('./keenan.dump')
 
         """
         # check file existence
@@ -195,13 +200,35 @@ class Keenan(object):
 
         return load(filepath)
 
-    def save_dump_svrs(self):
-        """ save only svrs """
-        pass
+    def save_dump_svrs(self, filepath, overwrite=False, *args, **kwargs):
+        """ [NOT RECOMMENDED] save only (wave, svrs) to dump file
+
+        Parameters
+        ----------
+        filepath: string
+            file path
+        overwrite: bool
+            If True, overwrite the file directly.
+
+        *args, **kwargs:
+            extra parameters are passed to joblib.dump()
+
+        Example
+        -------
+        >>> k.save_dump_svrs('./keenan_svrs.dump')
+
+        """
+        # check file existence
+        if os.path.exists(filepath) and not overwrite:
+            raise (IOError("@Keenan: file exists! [%s]" % filepath))
+        else:
+            # the joblib.dump() will overwrite file in default
+            dump((self.wave, self.svrs), filepath, *args, **kwargs)
+            return
 
     @classmethod
-    def load_dump_svrs(self, filepath):
-        """ initialize Keenan instance with only *svrs* data
+    def load_dump_svrs(cls, filepath):
+        """ [NOT RECOMMENDED] initialize Keenan instance with only *svrs* data
 
         Parameters
         ----------
@@ -210,32 +237,58 @@ class Keenan(object):
 
         Returns
         -------
+        A Keenan instance
+        flux, ivar and labels will be automatically filled with np.zeros
+
+        Example
+        -------
+        >>> k = Keenan.load_dump_svrs('./keenan_svrs.dump')
+        >>> print(k)
 
         """
-        pass
+        wave, svrs = load(filepath)
+        n_pix = len(wave)
+        k = Keenan(wave,
+                   np.zeros((10, n_pix)),
+                   np.zeros((10, n_pix)),
+                   np.zeros((10, n_pix)),
+                   scale=False)
+        k.svrs = svrs
+        k.trained = True
+        return k
 
     def train_svr(self, n_jobs=10, cv=10, *args, **kwargs):
         """ train pixels usig SVR
 
         Parameters
         ----------
-        filepath: string
-            the dump file path
+        n_jobs: int
+            number of jobs that will be launched simultaneously
+        cv: int
+            if cv>1, cv-fold Cross-Validation will be performed
+        *args, **kwargs:
+            will be passed to the svr.fit() method
 
         Returns
         -------
+        self.svrs: list
+            a list of SVR results
+        self.trained: bool
+            will be set True
 
         """
 
+
         self.trained = True
-        pass
+        return
 
 
 def _test_repr():
+    wave = np.arange(5000, 6000)
     tr_flux = np.random.randn(10, 1000)
     tr_ivar = np.random.randn(10, 1000)
     tr_labels = np.random.randn(10, 3)
-    k = Keenan(tr_flux, tr_ivar, tr_labels)
+    k = Keenan(wave, tr_flux, tr_ivar, tr_labels)
     print(k)
 
 
