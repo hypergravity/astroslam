@@ -7,7 +7,8 @@ if __name__ == '__main__':
         version='0.0.1',
         author='Bo Zhang',
         author_email='bozhang@nao.cas.cn',
-        description='A forward model using SVR to estimate stellar parameters from spectra.',  # short description
+        description=('A forward model using SVR to estimate stellar parameters'
+                     ' from spectra.'),  # short description
         license='MIT',
         # install_requires=['numpy>=1.7','scipy','matplotlib','nose'],
         url='http://github.com/hypergravity/TheKeenan',
@@ -30,5 +31,6 @@ if __name__ == '__main__':
         #                                     'data/template_base/Base.SED.FWHM2.5/*',
         #                                     'data/template_base/Base.SED.FWHM0.3/*']},
         # include_package_data=True,
-        requires=['numpy', 'scipy', 'matplotlib', 'astropy', 'bopy']
+        requires=['numpy', 'scipy', 'matplotlib', 'joblib', 'astropy',
+                  'sklearn']
     )
