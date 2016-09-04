@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import print_function
-
 """
 
 Author
@@ -25,10 +23,13 @@ Aims
 
 """
 
+from __future__ import print_function
+
 import os
 import numpy as np
 from joblib import load, dump, Parallel, delayed
 from .standardization import standardize, standardize_ivar
+from .train import train_multi_pixels
 
 
 class Keenan(object):
@@ -51,6 +52,7 @@ class Keenan(object):
 
     # SVR result list
     svrs = []
+    scores = []
     trained = False
 
     def __init__(self, wave, tr_flux, tr_ivar, tr_labels, scale=True):
@@ -257,7 +259,7 @@ class Keenan(object):
         k.trained = True
         return k
 
-    def train_svr(self, n_jobs=10, cv=10, *args, **kwargs):
+    def train_pixels(self, cv=10, n_jobs=10, method='simple', *args, **kwargs):
         """ train pixels usig SVR
 
         Parameters
@@ -277,7 +279,22 @@ class Keenan(object):
             will be set True
 
         """
+        # training
+        results = train_multi_pixels(self.tr_labels_scaled,
+                                     [y for y in self.tr_flux_scaled.T],
+                                     [None for y in self.tr_flux_scaled.T],
+                                     cv,
+                                     method=method,
+                                     n_jobs=n_jobs,
+                                     verbose=10,
+                                     **kwargs)
 
+        # clear & store new results
+        self.svrs = []
+        self.scores = []
+        for svr, score in results:
+            self.svrs.append(svr)
+            self.scores.append(score)
 
         self.trained = True
         return

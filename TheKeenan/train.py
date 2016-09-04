@@ -226,7 +226,7 @@ def train_single_pixel_mini(X, y, sample_weight=None, cv=10, **kwargs):
                               gamma=gamma, C=C, epsilon=epsilon, **kwargs)
 
 
-def train_multi_pixels(Xs, ys, sample_weights, cv,
+def train_multi_pixels(X, ys, sample_weights, cv,
                        method='simple', n_jobs=1, verbose=10, **kwargs):
     """ train multi pixels
 
@@ -234,7 +234,7 @@ def train_multi_pixels(Xs, ys, sample_weights, cv,
     ----------
     X: ndarray with shape (n_obs x n_dim)
         X in sklearn notation
-    y: ndarray with shape (n_obs, ) --> 1D
+    ys: ndarray with shape (n_obs x n_pix) -->
         y in sklearn notation
     method: string
         {'simpoe', 'grid', 'rand'}
@@ -257,8 +257,8 @@ def train_multi_pixels(Xs, ys, sample_weights, cv,
 
     # parallel run for SVR
     results = Parallel(n_jobs=n_jobs, verbose=verbose) \
-        (delayed(train_func)(X, y, sample_weight, cv, kwargs)
-         for X, y, sample_weight in zip(Xs, ys, sample_weights))
+        (delayed(train_func)(X, y, sample_weight, cv, **kwargs)
+         for y, sample_weight in zip(ys, sample_weights))
 
     # return results
     return results
