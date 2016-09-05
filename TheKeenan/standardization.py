@@ -23,11 +23,12 @@ Aims
 
 """
 
+from copy import deepcopy
 from sklearn import preprocessing
 
 
 def standardize(X):
-    """ Standardize X
+    """ Standardize X (flux / labels)
 
     Parameters
     ----------
@@ -46,6 +47,18 @@ def standardize(X):
     scaler = preprocessing.StandardScaler().fit(X)
     X_scaled = scaler.transform(X)
     return scaler, X_scaled
+
+
+def standardize_ivar(ivar, flux_scaler):
+    """ ivar_scaler is copied from flux_scaler, but mean_ is set to be 0
+    """
+    # copy flux_scaler & generate ivar_scaler
+    ivar_scaler = deepcopy(flux_scaler)
+    ivar_scaler.mean_ *= 0
+    ivar_scaler.scale_ **= -2.  # this is extremely important!
+    # transform ivar data
+    ivar_scaled = ivar_scaler.transform(ivar)
+    return ivar_scaler, ivar_scaled
 
 
 if __name__ == '__main__':
