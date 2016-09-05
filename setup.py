@@ -20,8 +20,10 @@ if __name__ == '__main__':
             "Programming Language :: Python :: 2.7",
             "Topic :: Scientific/Engineering :: Astronomy",
             "Topic :: Scientific/Engineering :: Physics"],
-        package_dir={'TheKeenan': 'TheKeenan'},
-        packages=['TheKeenan'],
+        package_dir={'TheKeenan': 'TheKeenan',
+                     'extern': 'TheKeenan/extern'},
+        packages=['TheKeenan',
+                  'TheKeenan/extern'],
         # package_data={'starlight_wrapper': ['data/SDSS_DR10/*',
         #                                     'data/SDSS_DR10/0603/*',
         #                                     'data/executable/*',
@@ -31,6 +33,6 @@ if __name__ == '__main__':
         #                                     'data/template_base/Base.SED.FWHM2.5/*',
         #                                     'data/template_base/Base.SED.FWHM0.3/*']},
         # include_package_data=True,
-        requires=['numpy', 'scipy', 'matplotlib', 'joblib', 'astropy',
-                  'sklearn']
+        requires=['numpy', 'scipy', 'matplotlib', 'astropy',
+                  'sklearn', 'joblib', 'pandas']
     )
