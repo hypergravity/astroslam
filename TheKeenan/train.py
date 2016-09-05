@@ -93,7 +93,7 @@ def train_single_pixel_grid(X, y, sample_weight=None, cv=10,
     param_grid: dict
         key, value pairs of hyper-parameter grids
         >>> param_grid = dict(C=2. ** np.arange(-5., 6.),
-        >>>                   epsilon=[0.01,0.05,0.1,0.15],
+        >>>                   epsilon=[0.01, 0.05, 0.1, 0.15],
         >>>                   gamma=['auto', 0.2, 0.25, 0.3, 0.5])
 
     kwargs:
@@ -116,7 +116,7 @@ def train_single_pixel_grid(X, y, sample_weight=None, cv=10,
     svr = svm.SVR(**kwargs)
     # perform GridSearchCV
     grid = GridSearchCV(svr, param_grid, cv=cv,
-                        fit_params={sample_weight: sample_weight},
+                        fit_params={'sample_weight': sample_weight},
                         scoring='mean_squared_error', n_jobs=1)
     # fit data
     grid.fit(X, y)
@@ -165,7 +165,7 @@ def train_single_pixel_rand(X, y, sample_weight=None, cv=10,
     svr = svm.SVR(**kwargs)
     # perform RandomizedSearchCV
     rand = RandomizedSearchCV(svr, param_dist, n_iter=n_iter, cv=cv,
-                              fit_params={sample_weight: sample_weight},
+                              fit_params={'sample_weight': sample_weight},
                               scoring='mean_squared_error', n_jobs=1)
     # fit data
     rand.fit(X, y)
@@ -236,11 +236,16 @@ def train_multi_pixels(X, ys, sample_weights, cv,
         X in sklearn notation
     ys: ndarray with shape (n_obs x n_pix) -->
         y in sklearn notation
+    sample_weights: ndarray
+        weight of sample data
+    cv: int
+        number of fold in Cross-Validation
     method: string
         {'simpoe', 'grid', 'rand'}
     n_jobs: int
         number of processes that will be launched by joblib
-
+    verbose: int
+        the same as joblib.Parallel() parameter verbose
     kwargs:
         extra kwargs will be passed to svm.SVR() method
 
