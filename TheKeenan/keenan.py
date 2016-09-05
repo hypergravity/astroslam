@@ -30,6 +30,7 @@ import numpy as np
 from joblib import load, dump, Parallel, delayed
 from .standardization import standardize, standardize_ivar
 from .train import train_multi_pixels
+from .predict import predict_labels
 
 
 class Keenan(object):
@@ -259,7 +260,8 @@ class Keenan(object):
         k.trained = True
         return k
 
-    def train_pixels(self, cv=10, n_jobs=10, method='simple', *args, **kwargs):
+    def train_pixels(self, cv=10, n_jobs=10, method='simple', verbose=10,
+                     *args, **kwargs):
         """ train pixels usig SVR
 
         Parameters
@@ -286,7 +288,7 @@ class Keenan(object):
                                      cv,
                                      method=method,
                                      n_jobs=n_jobs,
-                                     verbose=10,
+                                     verbose=verbose,
                                      **kwargs)
 
         # clear & store new results
@@ -298,6 +300,28 @@ class Keenan(object):
 
         self.trained = True
         return
+
+    def predict_label(self, X0, test_flux, test_ivar=None, mask=None,
+                      flux_scaler=True, labels_scaler=True, **kwargs):
+        """ predict labels for a given test spectrum (single)
+
+
+        """
+        if flux_scaler:
+            flux_scaler = self.tr_flux_scaler
+        else:
+            flux_scaler = None
+
+        if labels_scaler:
+            labels_scaler = labels_scaler
+        else:
+            labels_scaler = None
+
+        X_pred = predict_labels(
+            X0, self.svrs, test_flux, test_ivar=test_ivar, mask=mask,
+            flux_scaler=flux_scaler, labels_scaler=labels_scaler, **kwargs)
+
+        return X_pred
 
 
 def _test_repr():
