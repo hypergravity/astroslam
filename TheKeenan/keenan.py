@@ -27,24 +27,26 @@ from __future__ import print_function
 
 import os
 import numpy as np
+from astropy.table import Table
 from joblib import load, dump, Parallel, delayed
 from .standardization import standardize, standardize_ivar
 from .train import train_multi_pixels
 from .predict import predict_labels
+from .hyperparameter import summarize_hyperparameters_to_table, summarize_table
 
 
 class Keenan(object):
     """ This defines Keenan class """
     # training data
-    wave = None
-    tr_flux = None
-    tr_ivar = None
-    tr_labels = None
+    wave = np.zeros((0, 0))
+    tr_flux = np.zeros((0, 0))
+    tr_ivar = np.zeros((0, 0))
+    tr_labels = np.zeros((0, 0))
 
     # training data scalers
-    tr_flux_scaler = None
-    tr_ivar_scaler = None
-    tr_labels_scaler = None
+    tr_flux_scaler = np.zeros((0, 0))
+    tr_ivar_scaler = np.zeros((0, 0))
+    tr_labels_scaler = np.zeros((0, 0))
 
     # dimentions of data
     n_obs = 0
@@ -53,8 +55,14 @@ class Keenan(object):
 
     # SVR result list
     svrs = []
-    scores = []
+    hyperparams = Table(data=[np.zeros(0)] * 3,
+                        names=['C', 'gamma', 'epsilon'])
+    scores = np.zeros((0,))
     trained = False
+
+    # ####################### #
+    #     Basic functions     #
+    # ####################### #
 
     def __init__(self, wave, tr_flux, tr_ivar, tr_labels, scale=True):
         """ initialize the Keenan instance with tr_flux, tr_ivar, tr_labels
@@ -92,9 +100,8 @@ class Keenan(object):
             raise (ValueError(
                 "@Keenan: input data error, go back and check your data!"))
 
+        # if scale: do standardization
         if scale:
-            # if scale: do standardization
-
             # assign attributes
             self.tr_flux = tr_flux
             self.tr_ivar = tr_ivar
@@ -111,9 +118,8 @@ class Keenan(object):
             # update dimensions
             self.__update_dims__()
 
+        # if not scale, assume the input data is already scaled
         else:
-            # if not scale, assume the input data is already scaled
-
             # assign attributes
             self.tr_flux_scaled = tr_flux
             self.tr_ivar_scaled = tr_ivar
@@ -121,6 +127,10 @@ class Keenan(object):
 
             # update dimensions
             self.__update_dims__()
+
+    # ####################### #
+    #     update info         #
+    # ####################### #
 
     def __update_dims__(self, verbose=True):
         """ update data dimensions """
@@ -139,21 +149,37 @@ class Keenan(object):
             print("n_dim: %s --> %s" % (n_dim_old, self.n_dim))
             print("----------------------------------")
 
+    def __update_hyperparams__(self):
+        """ update hyper-parameters """
+        self.hyperparams = summarize_hyperparameters_to_table(self.svrs)
+        summarize_table(self.hyperparams)
+        return
+
+    # ####################### #
+    #     print info          #
+    # ####################### #
+
     def __repr__(self):
         repr_strs = [
-            "Keenan:",
-            "tr_flux............: ( %s x %s )" % (self.n_obs, self.n_pix),
-            "tr_ivar............: ( %s x %s )" % (self.n_obs, self.n_pix),
-            "tr_labels..........: ( %s x %s )" % (self.n_obs, self.n_dim),
+            "Keenan instance:",
+            "tr_flux............: ( %s x %s )" % self.tr_flux.shape,
+            "tr_ivar............: ( %s x %s )" % self.tr_ivar.shape,
+            "tr_labels..........: ( %s x %s )" % self.tr_labels.shape,
 
-            "tr_flux_scaler.....: ( %s x %s )" % (self.n_obs, self.n_pix),
-            "tr_ivar_scaler.....: ( %s x %s )" % (self.n_obs, self.n_pix),
-            "tr_labels_scaler...: ( %s x %s )" % (self.n_obs, self.n_dim),
+            "tr_flux_scaled.....: ( %s x %s )" % self.tr_flux_scaled.shape,
+            "tr_ivar_scaled.....: ( %s x %s )" % self.tr_ivar_scaled.shape,
+            "tr_labels_scaled...: ( %s x %s )" % self.tr_labels_scaled.shape,
 
             "svrs...............: list[%s]" % len(self.svrs),
+            "scores.............: list[%s]" % len(self.scores),
+            "hyper-parameters...: Table[length=%s]" % len(self.hyperparams),
             "trained............: %s" % self.trained,
         ]
         return '\n'.join(repr_strs)
+
+    # ####################### #
+    #     IO utils            #
+    # ####################### #
 
     def save_dump(self, filepath, overwrite=False, *args, **kwargs):
         """ save Keenan object to dump file using joblib
@@ -260,6 +286,10 @@ class Keenan(object):
         k.trained = True
         return k
 
+    # ####################### #
+    #     training            #
+    # ####################### #
+
     def train_pixels(self, cv=10, n_jobs=10, method='simple', verbose=10,
                      *args, **kwargs):
         """ train pixels usig SVR
@@ -281,6 +311,7 @@ class Keenan(object):
             will be set True
 
         """
+        # TODO: training taking into account the tr_ivar!
         # training
         results = train_multi_pixels(self.tr_labels_scaled,
                                      [y for y in self.tr_flux_scaled.T],
@@ -298,14 +329,20 @@ class Keenan(object):
             self.svrs.append(svr)
             self.scores.append(score)
 
+        # update hyper-parameters
+        self.__update_hyperparams__()
+
+        # set trained to True
         self.trained = True
         return
+
+    # ####################### #
+    #     predicting          #
+    # ####################### #
 
     def predict_label(self, X0, test_flux, test_ivar=None, mask=None,
                       flux_scaler=True, labels_scaler=True, **kwargs):
         """ predict labels for a given test spectrum (single)
-
-
         """
         if flux_scaler:
             flux_scaler = self.tr_flux_scaler
@@ -322,6 +359,41 @@ class Keenan(object):
             flux_scaler=flux_scaler, labels_scaler=labels_scaler, **kwargs)
 
         return X_pred
+
+    def predict_labels(self, X0, test_flux, test_ivar=None, mask=None,
+                       flux_scaler=True, labels_scaler=True, **kwargs):
+        """ predict labels for a given test spectrum (multiple)
+        NOTE
+        ----
+        all input should be 2D array or sequential
+
+        """
+        # default scalers
+        if flux_scaler:
+            flux_scaler = self.tr_flux_scaler
+        else:
+            flux_scaler = None
+
+        if labels_scaler:
+            labels_scaler = labels_scaler
+        else:
+            labels_scaler = None
+
+        # if you want different initial values ...
+        if X0.ndim == 1:
+            X0 = X0.reshape(1, -1).repeat(2, axis=0)
+
+        # loop predictions
+        n_test = X0.shape[0]
+        X_pred = []
+        for i in range(n_test):
+            X_pred.append(predict_labels(
+                X0[i], self.svrs, test_flux[i],
+                test_ivar=test_ivar[i], mask=mask[i],
+                flux_scaler=flux_scaler, labels_scaler=labels_scaler,
+                **kwargs))
+
+        return np.array(X_pred)
 
 
 def _test_repr():
