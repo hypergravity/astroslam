@@ -23,8 +23,10 @@ Aims
 
 """
 from __future__ import division
+
 import numpy as np
 from joblib import Parallel, delayed
+
 from .extern.interpolate import SmoothSpline
 
 

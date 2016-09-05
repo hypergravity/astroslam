@@ -25,6 +25,7 @@ Aims
 
 import numpy as np
 from scipy.optimize import minimize
+
 from costfunction import chi2_simple_1d
 
 

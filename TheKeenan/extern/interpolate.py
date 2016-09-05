@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 from __future__ import absolute_import, division
+
 import numpy as np
 import scipy.signal
+
 # import scipy.sparse.linalg  # @UnusedImport
 import scipy.sparse as sparse
 from numpy import ones, zeros, prod, sin, diff, pi, inf, vstack, linspace

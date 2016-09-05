@@ -26,13 +26,15 @@ Aims
 from __future__ import print_function
 
 import os
+
 import numpy as np
 from astropy.table import Table
-from joblib import load, dump, Parallel, delayed
+from joblib import load, dump
+
+from .hyperparameter import summarize_hyperparameters_to_table, summarize_table
+from .predict import predict_labels
 from .standardization import standardize, standardize_ivar
 from .train import train_multi_pixels
-from .predict import predict_labels
-from .hyperparameter import summarize_hyperparameters_to_table, summarize_table
 
 
 class Keenan(object):

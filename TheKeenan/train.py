@@ -24,11 +24,11 @@ Aims
 """
 
 import numpy as np
+from joblib import Parallel, delayed
 from scipy import stats
 from scipy.optimize import minimize
 from sklearn import svm, cross_validation
 from sklearn.grid_search import GridSearchCV, RandomizedSearchCV
-from joblib import Parallel, delayed
 
 
 def train_single_pixel(X, y, sample_weight=None, cv=10,

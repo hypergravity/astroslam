@@ -18,14 +18,16 @@
 # ------------------------------------------------------------------------
 # !/usr/bin/env python
 from __future__ import absolute_import
+
 import warnings  # @UnusedImport
 from functools import reduce
-from numpy.polynomial import polyutils as pu
-from matplotlib import pyplot as plt  # modified by Bo Zhang
+
 import numpy as np
+from matplotlib import pyplot as plt  # modified by Bo Zhang
 from numpy import (newaxis, arange, pi)
-from scipy.fftpack import dct, idct as _idct
 from numpy.lib.polynomial import *  # @UnusedWildImport
+from numpy.polynomial import polyutils as pu
+from scipy.fftpack import dct, idct as _idct
 from scipy.misc import pade  # @UnresolvedImport
 
 __all__ = np.lib.polynomial.__all__
