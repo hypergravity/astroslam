@@ -30,6 +30,7 @@ from joblib import Parallel, delayed
 from .extern.interpolate import SmoothSpline
 
 
+# TODO: should take into account ivar?
 def normalize_spectrum(wave, flux, norm_range, dwave, p=(1E-6, 1E-6), q=0.5):
     """ A double smooth normalization of a spectrum
     Converted from Chao Liu's normSpectrum.m
@@ -68,8 +69,8 @@ def normalize_spectrum(wave, flux, norm_range, dwave, p=(1E-6, 1E-6), q=0.5):
     assert 0. < q < 1.
 
     # n_iter = len(p)
-    n_bin = np.fix(np.diff(norm_range) / dwave)
-    wave1, wave2 = norm_range
+    n_bin = np.fix(np.diff(norm_range) / dwave) + 1
+    wave1 = norm_range[0]
 
     # SMOOTH 1
     flux_smoothed1 = SmoothSpline(wave, flux, p[0])(wave)
@@ -77,18 +78,24 @@ def normalize_spectrum(wave, flux, norm_range, dwave, p=(1E-6, 1E-6), q=0.5):
 
     # collecting continuum pixels --> ITERATION 1
     ind_good = np.zeros(wave.shape, dtype=np.bool)
-    print('nbin: ', n_bin)
     for i_bin in range(n_bin):
-        ind_bin = np.logical_and(wave > wave1 + i_bin * dwave,
-                                 wave <= wave1 + (i_bin + 1) * dwave)
-        print(wave[ind_bin])
-        # median & sigma
-        bin_median = np.median(dflux[ind_bin])
-        bin_std = np.median(np.abs(dflux - bin_median))
-        # within 1 sigma with q-percentile
-        ind_good = np.logical_or(ind_good, (np.abs(
-            dflux - np.percentile(dflux[ind_bin], q * 100.)) < (
-                                                1. * bin_std)) * ind_bin)
+        ind_bin = np.logical_and(wave > wave1 + (i_bin - 0.5) * dwave,
+                                 wave <= wave1 + (i_bin + 0.5) * dwave)
+        if np.sum(ind_bin > 0):
+            # median & sigma
+            bin_median = np.median(dflux[ind_bin])
+            bin_std = np.median(np.abs(dflux - bin_median))
+            # within 1 sigma with q-percentile
+            ind_good = np.logical_or(ind_good, (np.abs(
+                dflux - np.percentile(dflux[ind_bin], q * 100.)) < (
+                                                    1. * bin_std)) * ind_bin)
+
+    # assert there is continuum pixels
+    try:
+        assert np.sum(ind_good) > 0
+    except AssertionError:
+        Warning("@Keenan.normalize_spectrum(): unable to find continuum! ")
+        ind_good = np.ones(wave.shape, dtype=np.bool)
 
     # SMOOTH 2
     # continuum flux
@@ -100,7 +107,7 @@ def normalize_spectrum(wave, flux, norm_range, dwave, p=(1E-6, 1E-6), q=0.5):
 
 
 def normalize_spectra_block(wave, flux_block, norm_range, dwave,
-                            p=(1E-6, 1E-6), q=50, n_jobs=1, verbose=10):
+                            p=(1E-6, 1E-6), q=0.5, n_jobs=1, verbose=10):
     """ normalize multiple spectra using the same configuration
     This is specially designed for TheKeenan
 
@@ -134,7 +141,7 @@ def normalize_spectra_block(wave, flux_block, norm_range, dwave,
 
     results = Parallel(n_jobs=n_jobs, verbose=verbose)(
         delayed(normalize_spectrum)(
-            wave, flux_item, norm_range, dwave, p=(1E-6, 1E-6), q=50)
+            wave, flux_item, norm_range, dwave, p=p, q=q)
         for flux_item in flux_block)
 
     # unpack results

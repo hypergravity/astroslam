@@ -33,10 +33,11 @@ def predict_pixel(svr, X_, mask=True):
     """ predict single pixels for a given wavelength """
     assert X_.ndim == 2
 
-    if mask is True:
+    # print('mask: ', mask)
+    if mask:
         y = svr.predict(X_)  # predicted y is a flatten array
     else:
-        y = np.ones((X_.shape[0],)) * np.nan
+        y = np.nan
 
     return y
 
@@ -59,7 +60,8 @@ def predict_spectrum(svrs, X_, mask=None, scaler=None):
         predicted spectra
 
     """
-    assert X_.ndim == 2
+    if X_.ndim == 1:
+        X_ = X_.reshape(1, -1)
 
     # scale X_ if necessary
     if scaler is not None:
@@ -67,9 +69,11 @@ def predict_spectrum(svrs, X_, mask=None, scaler=None):
 
     # default is to use all pixels
     if mask is None:
-        mask = np.ones((X_.shape[0],), dtype=np.bool)
+        mask = np.ones((len(svrs),), dtype=np.bool)
 
     # make predictions
+    # print('number of true mask: ', np.sum(mask))
+    # print('mask len: ', mask.shape)
     ys = [predict_pixel(svr, X_, mask_) for svr, mask_ in zip(svrs, mask)]
     ys = np.array(ys).T
 
@@ -82,6 +86,8 @@ def predict_labels(X0, svrs, test_flux, test_ivar=None, mask=None,
 
     Parameters
     ----------
+    X0 : ndarray (n_test, n_dim)
+        initial guess
     svrs: list
         a list of svr objects
     test_flux: ndarray
@@ -106,16 +112,17 @@ def predict_labels(X0, svrs, test_flux, test_ivar=None, mask=None,
 
     # scale test_flux if necessary
     if flux_scaler is not None:
-        test_flux = flux_scaler.transform(test_flux)
+        test_flux = flux_scaler.transform(test_flux.reshape(1, -1)).flatten()
 
-    # do minimization using Nelder-Mead method
+    # do minimization using Nelder-Mead method [tol=1.e-8 set by user!]
     X_pred = minimize(costfun_from_label, X0,
                       args=(svrs, test_flux, test_ivar, mask),
-                      method='Nelder-Mead', tol=1.e-8, **kwargs)
+                      method='Nelder-Mead', **kwargs)
 
     # scale X_pred back if necessary
     if labels_scaler is not None:
-        X_pred = flux_scaler.transform(X_pred)
+        X_pred = labels_scaler.inverse_transform(
+            X_pred['x'].reshape(1, -1)).flatten()
 
     return X_pred
 
@@ -127,9 +134,9 @@ def costfun_from_label(X_, svrs, test_flux, test_ivar, mask):
     ----------
     svrs: list
         a list of svr objects
-    test_flux: ndarray
+    test_flux: ndarray (n_pix, )
         test flux
-    test_ivar: ndarray
+    test_ivar: ndarray (n_pix, )
         test ivar
     mask: None | bool array
         predict the pixels where mask==True
@@ -137,7 +144,8 @@ def costfun_from_label(X_, svrs, test_flux, test_ivar, mask):
     """
     # default is to use all pixels
     if mask is None:
-        mask = np.ones((X_.shape[0],), dtype=np.bool)
+        mask = np.ones((len(test_flux),), dtype=np.bool)
+
     # default ivar is all 1
     if test_ivar is None:
         test_ivar = np.ones_like(test_flux)
@@ -148,6 +156,7 @@ def costfun_from_label(X_, svrs, test_flux, test_ivar, mask):
 
     # do prediction
     pred_flux = predict_spectrum(svrs, X_, mask)
+    # the pred_flux contains nan for mask=False pixels
 
     # calculate chi2
     return chi2_simple_1d(test_flux, pred_flux, ivar=test_ivar)

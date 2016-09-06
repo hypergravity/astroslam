@@ -33,11 +33,13 @@ from scipy.stats import chisquare
 def chi2_simple_1d(spec_obs, spec_pred, ivar=None):
     """ Calculate ivar-weighted chi-square for two spectra """
     if ivar is not None:
-        return np.sum((np.array(spec_obs).flatten() - np.array(
+        chi2_value = np.nansum((np.array(spec_obs).flatten() - np.array(
             spec_pred).flatten()) ** 2.)
     else:
-        return np.sum((np.array(spec_obs).flatten() - np.array(
+        chi2_value = np.nansum((np.array(spec_obs).flatten() - np.array(
             spec_pred).flatten()) ** 2. * np.array(ivar).flatten())
+    # print('chi2: ', chi2_value)
+    return chi2_value
 
 
 def chi2(a, b):

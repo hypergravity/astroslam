@@ -37,6 +37,6 @@ def summarize_table(hpt):
     """ summarize table data """
 
     # simgply use pandas.DataFrame.describe()
-    hpt.to_pandas().describe()
+    print(hpt.to_pandas().describe())
 
     return

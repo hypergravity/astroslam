@@ -29,12 +29,14 @@ import os
 
 import numpy as np
 from astropy.table import Table
-from joblib import load, dump
+from joblib import load, dump, Parallel, delayed
 
 from .hyperparameter import summarize_hyperparameters_to_table, summarize_table
 from .predict import predict_labels
 from .standardization import standardize, standardize_ivar
 from .train import train_multi_pixels
+
+__all__ = ['Keenan']
 
 
 class Keenan(object):
@@ -178,6 +180,31 @@ class Keenan(object):
             "trained............: %s" % self.trained,
         ]
         return '\n'.join(repr_strs)
+
+    def hyperparams_summary(self, mask=None):
+        """ summarize the hyper-parameter table
+
+        Parameters
+        ----------
+        mask: None | bool array
+            if not None, only unmasked rows are summarized
+
+        """
+
+        if mask is None:
+            summarize_table(self.hyperparams)
+        else:
+            summarize_table(self.hyperparams[mask])
+
+        return
+
+    def pprint(self, mask=None):
+        """ print info about self & hyper-parameters """
+
+        print(self.__repr__())
+        self.hyperparams_summary(mask=mask)
+
+        return
 
     # ####################### #
     #     IO utils            #
@@ -342,34 +369,98 @@ class Keenan(object):
     #     predicting          #
     # ####################### #
 
-    def predict_label(self, X0, test_flux, test_ivar=None, mask=None,
+    # TODO: prediction functions forms should be confirmed
+
+    def predict_labels(self, X0, test_flux, test_ivar=None, mask=None,
                       flux_scaler=True, labels_scaler=True, **kwargs):
         """ predict labels for a given test spectrum (single)
+
+        Parameters
+        ----------
+        X0 : ndarray (1 x n_dim)
+            the initial guess of predicted label
+        test_flux : ndarray (n_pix, )
+            test flux array
+        test_ivar : ndarray (n_pix, )
+            test ivar array
+        mask : bool ndarray (n_pix, )
+            manual mask, False pixels are not evaluated for speed up
+        flux_scaler : scaler object
+            flux scaler. if False, it doesn't perform scaling
+        labels_scaler : scaler object
+            labels scaler. if False, it doesn't perform scaling
+        kwargs :
+            extra parameters passed to *minimize()*
+            **tol** should be specified by user according to n_pix
+
         """
+
+        # if scale, set scalers
         if flux_scaler:
             flux_scaler = self.tr_flux_scaler
         else:
             flux_scaler = None
 
         if labels_scaler:
-            labels_scaler = labels_scaler
+            labels_scaler = self.tr_labels_scaler
         else:
             labels_scaler = None
 
+        # mask default
+        if mask is None:
+            mask = np.ones_like(test_flux, dtype=np.bool)
+
+        # test_ivar default
+        if test_ivar is None:
+            test_ivar = np.ones_like(test_flux, dtype=np.float)
+
+        # test_ivar normalization
+        test_ivar /= np.nansum(test_ivar[mask])
+
+        # predict labels
         X_pred = predict_labels(
             X0, self.svrs, test_flux, test_ivar=test_ivar, mask=mask,
             flux_scaler=flux_scaler, labels_scaler=labels_scaler, **kwargs)
 
         return X_pred
 
-    def predict_labels(self, X0, test_flux, test_ivar=None, mask=None,
-                       flux_scaler=True, labels_scaler=True, **kwargs):
+    def predict_labels_multi(self, X0, test_flux, test_ivar=None, mask=None,
+                             flux_scaler=True, labels_scaler=True,
+                             n_jobs=1, verbose=False,
+                             **kwargs):
         """ predict labels for a given test spectrum (multiple)
+
+        Parameters
+        ----------
+        X0 : ndarray (1 x n_dim)
+            the initial guess of predicted label
+        test_flux : ndarray (n_test, n_pix)
+            test flux array
+        test_ivar : ndarray (n_test, n_pix)
+            test ivar array
+        mask : bool ndarray (n_test, n_pix)
+            manual mask, False pixels are not evaluated for speed up
+        flux_scaler : scaler object
+            flux scaler. if False, it doesn't perform scaling
+        labels_scaler : scaler object
+            labels scaler. if False, it doesn't perform scaling
+        n_jobs: int
+            number of processes launched by joblib
+        verbose: int
+            verbose level
+
+        kwargs :
+            extra parameters passed to *minimize()*
+            **tol** should be specified by user according to n_pix
+
         NOTE
         ----
-        all input should be 2D array or sequential
+        ** all input should be 2D array or sequential **
 
         """
+        # determine n_test
+        n_test = test_flux.shape[0]
+
         # default scalers
         if flux_scaler:
             flux_scaler = self.tr_flux_scaler
@@ -377,23 +468,61 @@ class Keenan(object):
             flux_scaler = None
 
         if labels_scaler:
-            labels_scaler = labels_scaler
+            labels_scaler = self.tr_labels_scaler
         else:
             labels_scaler = None
 
+        # ##########################################################
+
+        # mask must be set here!
+        if mask is None:
+            # no mask is set
+            mask = np.ones_like(test_flux, dtype=np.bool)
+        elif mask.ndim == 1 and len(mask) == test_flux.shape[1]:
+            # if only one mask is specified
+            mask = np.array([mask for _ in range(n_test)])
+
+        # test_ivar must be set here!
+        if test_ivar is None:
+            test_ivar = np.ones_like(test_flux, dtype=np.float)
+
+        # update test_ivar : negative ivar set to 0
+        test_ivar = np.where(test_ivar < 0.,
+                             np.zeros_like(test_ivar), test_ivar)
+        test_ivar = np.where(np.isnan(test_ivar),
+                             np.zeros_like(test_ivar), test_ivar)
+        test_ivar = np.where(np.isinf(test_ivar),
+                             np.zeros_like(test_ivar), test_ivar)
+
+        # update mask for low ivar pixels
+        test_ivar_threshold = np.array(
+            [np.median(_[_ > 0]) * 0.05 for _ in test_ivar]).reshape(-1, 1)
+        mask = np.where(test_ivar < test_ivar_threshold,
+                        np.zeros_like(mask, dtype=np.bool), mask)
+
+        # test_ivar normalization
+        test_ivar /= np.sum(test_ivar, axis=1).reshape(-1, 1)
+
+        # ##########################################################
+
         # if you want different initial values ...
         if X0.ndim == 1:
-            X0 = X0.reshape(1, -1).repeat(2, axis=0)
+            # only one initial guess is set
+            X0 = X0.reshape(1, -1).repeat(n_test, axis=0)
+        elif X0.shape[0] == 1:
+            # only one initial guess is set, but 2D shape
+            X0 = X0.reshape(1, -1).repeat(n_test, axis=0)
+
+        # ##########################################################
 
         # loop predictions
-        n_test = X0.shape[0]
-        X_pred = []
-        for i in range(n_test):
-            X_pred.append(predict_labels(
-                X0[i], self.svrs, test_flux[i],
+        X_pred = Parallel(n_jobs=n_jobs, verbose=verbose)(
+            delayed(predict_labels)(
+                X0[i].reshape(1, -1), self.svrs, test_flux[i],
                 test_ivar=test_ivar[i], mask=mask[i],
-                flux_scaler=flux_scaler, labels_scaler=labels_scaler,
-                **kwargs))
+                flux_scaler=flux_scaler, labels_scaler=labels_scaler, **kwargs
+            ) for i in range(n_test)
+        )
 
         return np.array(X_pred)
 
