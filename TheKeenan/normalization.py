@@ -30,8 +30,8 @@ from joblib import Parallel, delayed
 from .extern.interpolate import SmoothSpline
 
 
-# TODO: should take into account ivar?
-def normalize_spectrum(wave, flux, norm_range, dwave, p=(1E-6, 1E-6), q=0.5):
+def normalize_spectrum(wave, flux, norm_range, dwave,
+                       p=(1E-6, 1E-6), q=0.5, ivar=None, eps=1e-10):
     """ A double smooth normalization of a spectrum
     Converted from Chao Liu's normSpectrum.m
 
@@ -65,7 +65,21 @@ def normalize_spectrum(wave, flux, norm_range, dwave, p=(1E-6, 1E-6), q=0.5):
     >>>     wave, flux, (4000., 8000.), 100., p=(1E-8, 1E-7), q=0.5)
 
     """
+    if ivar is not None:
+        # ivar is set
+        ivar = np.where(np.logical_or(wave < norm_range[0],
+                                      wave > norm_range[1]), 0, ivar)
+        ivar = np.where(ivar <= eps, eps, ivar)
+        mask = ivar <= eps
+        var = 1. / ivar
+    else:
+        # default config is even weight
+        var = 1
 
+    # wave = wave[~mask]
+    # flux = flux[~mask]
+
+    # check q region
     assert 0. < q < 1.
 
     # n_iter = len(p)
@@ -73,7 +87,8 @@ def normalize_spectrum(wave, flux, norm_range, dwave, p=(1E-6, 1E-6), q=0.5):
     wave1 = norm_range[0]
 
     # SMOOTH 1
-    flux_smoothed1 = SmoothSpline(wave, flux, p[0])(wave)
+    # print(wave.shape, flux.shape, var.shape)
+    flux_smoothed1 = SmoothSpline(wave, flux, p=p[0], var=var)(wave)
     dflux = flux - flux_smoothed1
 
     # collecting continuum pixels --> ITERATION 1
@@ -99,7 +114,8 @@ def normalize_spectrum(wave, flux, norm_range, dwave, p=(1E-6, 1E-6), q=0.5):
 
     # SMOOTH 2
     # continuum flux
-    flux_smoothed2 = SmoothSpline(wave[ind_good], flux[ind_good], p[1])(wave)
+    flux_smoothed2 = SmoothSpline(
+        wave[ind_good], flux[ind_good], p=p[1], var=var[ind_good])(wave)
     # normalized flux
     flux_norm = flux / flux_smoothed2
 
@@ -107,7 +123,8 @@ def normalize_spectrum(wave, flux, norm_range, dwave, p=(1E-6, 1E-6), q=0.5):
 
 
 def normalize_spectra_block(wave, flux_block, norm_range, dwave,
-                            p=(1E-6, 1E-6), q=0.5, n_jobs=1, verbose=10):
+                            p=(1E-6, 1E-6), q=0.5, ivar_block=None, eps=1e-10,
+                            n_jobs=1, verbose=10):
     """ normalize multiple spectra using the same configuration
     This is specially designed for TheKeenan
 
@@ -138,11 +155,18 @@ def normalize_spectra_block(wave, flux_block, norm_range, dwave,
         normalized flux
 
     """
+    if ivar_block is None:
+        ivar_block = np.ones_like(flux_block)
+
+    if flux_block.ndim == 1:
+        flux_block.reshape(1, -1)
+    n_spec = flux_block.shape[0]
 
     results = Parallel(n_jobs=n_jobs, verbose=verbose)(
         delayed(normalize_spectrum)(
-            wave, flux_item, norm_range, dwave, p=p, q=q)
-        for flux_item in flux_block)
+            wave, flux_block[i], norm_range, dwave, p=p, q=q,
+            ivar=ivar_block[i], eps=eps)
+        for i in range(n_spec))
 
     # unpack results
     flux_norm_block = []
@@ -151,9 +175,10 @@ def normalize_spectra_block(wave, flux_block, norm_range, dwave,
         flux_norm_block.append(result[0])
         flux_cont_block.append(result[1])
 
-    return flux_norm_block, flux_cont_block
+    return np.array(flux_norm_block), np.array(flux_cont_block)
 
 
+# TODO: this is a generalized version
 def normalize_spectra(wave_flux_tuple_list, norm_range, dwave,
                       p=(1E-6, 1E-6), q=50, n_jobs=1, verbose=False):
     """ normalize multiple spectra using the same configuration
@@ -182,7 +207,43 @@ def normalize_spectra(wave_flux_tuple_list, norm_range, dwave,
     flux_norm: ndarray
         normalized flux
 
-
     """
-    # TODO: this is a generalized version
     pass
+
+
+def test_normaliza_spectra_block():
+    import os
+
+    os.chdir('/pool/projects/TheKeenan/data/TheCannonData')
+
+    from TheCannon import apogee
+    import matplotlib.pyplot as plt
+
+    tr_ID, wl, tr_flux, tr_ivar = apogee.load_spectra("example_DR10/Data")
+    tr_label = apogee.load_labels("example_DR10/reference_labels.csv")
+
+    test_ID = tr_ID
+    test_flux = tr_flux
+    test_ivar = tr_ivar
+
+    r = normalize_spectra_block(wl, tr_flux, (15200., 16900.), 30., q=0.5,
+                                ivar_block=tr_ivar, n_jobs=10, verbose=10)
+
+    flux_norm, flux_cont = r
+    flux_norm = np.array(flux_norm)
+    flux_cont = np.array(flux_cont)
+    flux_ivar = tr_ivar * flux_cont ** 2
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    for i in range(10, 20):
+        ofst = i * 0.5
+        ax.plot(wl, tr_flux[i] + ofst, 'b')
+        ax.plot(wl, flux_cont[i] + ofst, 'r')
+    fig.tight_layout()
+    fig.savefig(
+        '/pool/projects/TheKeenan/data/TheCannonData/test_norm_spec.pdf')
+
+
+if __name__ == '__main__':
+    test_normaliza_spectra_block()
