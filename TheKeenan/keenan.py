@@ -32,7 +32,7 @@ from astropy.table import Table
 from joblib import load, dump, Parallel, delayed
 
 from .hyperparameter import summarize_hyperparameters_to_table, summarize_table
-from .predict import predict_labels
+from .predict import predict_labels, predict_spectrum
 from .standardization import standardize, standardize_ivar
 from .train import train_multi_pixels
 
@@ -329,6 +329,12 @@ class Keenan(object):
             number of jobs that will be launched simultaneously
         cv: int
             if cv>1, cv-fold Cross-Validation will be performed
+        method: {'simple' | 'grid' | 'rand'}
+            simple: directly use user-defined hyper-parameters
+            grid: grid search for optimized hyper-parameters
+            rand: randomized search for optimized hyper-parameters
+        verbose:
+            verbose level
         *args, **kwargs:
             will be passed to the svr.fit() method
 
@@ -424,9 +430,10 @@ class Keenan(object):
 
         return X_pred
 
+    # in this method, do not use scaler defined in predict_labels()
     def predict_labels_multi(self, X0, test_flux, test_ivar=None, mask=None,
-                             flux_scaler=True, labels_scaler=True,
-                             n_jobs=1, verbose=False,
+                             flux_scaler=True, ivar_scaler=True,
+                             labels_scaler=True, n_jobs=1, verbose=False,
                              **kwargs):
         """ predict labels for a given test spectrum (multiple)
 
@@ -458,21 +465,30 @@ class Keenan(object):
         ** all input should be 2D array or sequential **
 
         """
-        # determine n_test
+        # 0. determine n_test
         n_test = test_flux.shape[0]
 
-        # default scalers
+        # 1. default scalers
         if flux_scaler:
             flux_scaler = self.tr_flux_scaler
         else:
             flux_scaler = None
+
+        if ivar_scaler:
+            ivar_scaler = self.tr_ivar_scaler
+        else:
+            ivar_scaler = None
 
         if labels_scaler:
             labels_scaler = self.tr_labels_scaler
         else:
             labels_scaler = None
 
-        # ##########################################################
+        # 2. scale test_flux
+        if flux_scaler is not None:
+            test_flux = flux_scaler.transform(test_flux)
+
+        # 3. set default mask, test_ivar
 
         # mask must be set here!
         if mask is None:
@@ -482,11 +498,20 @@ class Keenan(object):
             # if only one mask is specified
             mask = np.array([mask for _ in range(n_test)])
 
+        # 4. scale test_ivar
+
         # test_ivar must be set here!
         if test_ivar is None:
+            # test_ivar=None, directly set test_ivar
             test_ivar = np.ones_like(test_flux, dtype=np.float)
+        # test_ivar is not None
+        elif ivar_scaler is not None:
+            # do scaling for test_ivar
+            test_ivar = ivar_scaler.transform(test_ivar)
+            # else:
+            # don't do scaling for test_ivar
 
-        # update test_ivar : negative ivar set to 0
+        # 5. update test_ivar : negative ivar set to 0
         test_ivar = np.where(test_ivar < 0.,
                              np.zeros_like(test_ivar), test_ivar)
         test_ivar = np.where(np.isnan(test_ivar),
@@ -494,18 +519,19 @@ class Keenan(object):
         test_ivar = np.where(np.isinf(test_ivar),
                              np.zeros_like(test_ivar), test_ivar)
 
-        # update mask for low ivar pixels
+        # 6. update mask for low ivar pixels
         test_ivar_threshold = np.array(
             [np.median(_[_ > 0]) * 0.05 for _ in test_ivar]).reshape(-1, 1)
         mask = np.where(test_ivar < test_ivar_threshold,
                         np.zeros_like(mask, dtype=np.bool), mask)
 
-        # test_ivar normalization
+        # 7. test_ivar normalization
         test_ivar /= np.sum(test_ivar, axis=1).reshape(-1, 1)
 
-        # ##########################################################
+        assert test_flux.shape == test_ivar.shape
+        assert test_flux.shape == mask.shape
 
-        # if you want different initial values ...
+        # 8. if you want different initial values ...
         if X0.ndim == 1:
             # only one initial guess is set
             X0 = X0.reshape(1, -1).repeat(n_test, axis=0)
@@ -513,18 +539,42 @@ class Keenan(object):
             # only one initial guess is set, but 2D shape
             X0 = X0.reshape(1, -1).repeat(n_test, axis=0)
 
-        # ##########################################################
-
-        # loop predictions
+        # 9. loop predictions
         X_pred = Parallel(n_jobs=n_jobs, verbose=verbose)(
             delayed(predict_labels)(
                 X0[i].reshape(1, -1), self.svrs, test_flux[i],
                 test_ivar=test_ivar[i], mask=mask[i],
-                flux_scaler=flux_scaler, labels_scaler=labels_scaler, **kwargs
-            ) for i in range(n_test)
+                flux_scaler=None, ivar_scaler=None, labels_scaler=None,
+                **kwargs) for i in range(n_test)
         )
+        X_pred = np.array(X_pred)
 
-        return np.array(X_pred)
+        # 10. scale X_pred back if necessary
+        if labels_scaler is not None:
+            X_pred = labels_scaler.inverse_transform(X_pred)
+
+        return X_pred
+
+    def predict_spectra(self, X_pred, scaler=True):
+        """ predict spectra using trained SVRs
+
+        Parameters
+        ----------
+        X_pred: ndarray (n_test, n_dim)
+            labels of predicted spectra
+
+        Returns
+        -------
+        pred_flux: ndarray (n_test, n_pix)
+            predicted spectra
+
+        """
+        if scaler:
+            X_pred = self.tr_labels_scaler.transform(X_pred)
+
+        pred_flux = predict_spectrum(self.svrs, X_pred)
+
+        return pred_flux
 
 
 def _test_repr():

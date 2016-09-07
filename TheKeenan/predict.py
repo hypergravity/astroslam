@@ -81,7 +81,8 @@ def predict_spectrum(svrs, X_, mask=None, scaler=None):
 
 
 def predict_labels(X0, svrs, test_flux, test_ivar=None, mask=None,
-                   flux_scaler=None, labels_scaler=None, **kwargs):
+                   flux_scaler=None, ivar_scaler=None, labels_scaler=None,
+                   **kwargs):
     """ predict scaled labels for test_flux
 
     Parameters
@@ -114,6 +115,10 @@ def predict_labels(X0, svrs, test_flux, test_ivar=None, mask=None,
     if flux_scaler is not None:
         test_flux = flux_scaler.transform(test_flux.reshape(1, -1)).flatten()
 
+    # scale test_ivar if necessary
+    if ivar_scaler is not None:
+        test_ivar = ivar_scaler.transform(test_ivar.reshape(1, -1)).flatten()
+
     # do minimization using Nelder-Mead method [tol=1.e-8 set by user!]
     X_pred = minimize(costfun_from_label, X0,
                       args=(svrs, test_flux, test_ivar, mask),
@@ -123,6 +128,8 @@ def predict_labels(X0, svrs, test_flux, test_ivar=None, mask=None,
     if labels_scaler is not None:
         X_pred = labels_scaler.inverse_transform(
             X_pred['x'].reshape(1, -1)).flatten()
+    else:
+        X_pred = X_pred['x'].flatten()
 
     return X_pred
 
