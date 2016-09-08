@@ -32,7 +32,7 @@ from astropy.table import Table
 from joblib import load, dump, Parallel, delayed
 
 from .hyperparameter import summarize_hyperparameters_to_table, summarize_table
-from .predict import predict_labels, predict_spectrum
+from .predict import predict_labels, predict_labels_chi2, predict_spectrum
 from .standardization import standardize, standardize_ivar
 from .train import train_multi_pixels
 
@@ -430,6 +430,24 @@ class Keenan(object):
 
         return X_pred
 
+    def predict_labels_quick(self, test_flux, test_ivar,
+                             tplt_flux=None, tplt_labels=None,
+                             n_jobs=1, verbose=False):
+        """ a quick chi2 search for labels """
+
+        if tplt_flux is None and tplt_labels is None:
+            # use default tplt_flux & tplt_labels
+            X_quick = predict_labels_chi2(self.tr_flux, self.tr_labels,
+                                          test_flux, test_ivar,
+                                          n_jobs=n_jobs, verbose=verbose)
+        else:
+            # use user-defined tplt_flux & tplt_labels
+            X_quick = predict_labels_chi2(tplt_flux, tplt_labels,
+                                          test_flux, test_ivar,
+                                          n_jobs=n_jobs, verbose=verbose)
+
+        return X_quick
+
     # in this method, do not use scaler defined in predict_labels()
     def predict_labels_multi(self, X0, test_flux, test_ivar=None, mask=None,
                              flux_scaler=True, ivar_scaler=True,
@@ -539,6 +557,9 @@ class Keenan(object):
             # only one initial guess is set, but 2D shape
             X0 = X0.reshape(1, -1).repeat(n_test, axis=0)
 
+        if labels_scaler is not None:
+            X0 = labels_scaler.transform(X0)
+
         # 9. loop predictions
         X_pred = Parallel(n_jobs=n_jobs, verbose=verbose)(
             delayed(predict_labels)(
@@ -575,6 +596,32 @@ class Keenan(object):
         pred_flux = predict_spectrum(self.svrs, X_pred)
 
         return pred_flux
+
+    # ####################### #
+    #     daignostics         #
+    # ####################### #
+
+    def compare_labels(self):
+        pass
+
+    # ####################### #
+    #     utils               #
+    # ####################### #
+
+    def set_mask(self, mask_init, set_range, set_val):
+        """ set pixels in wave_ranges to value
+        """
+        # vectorize mask_init
+        if np.isscalar(mask_init):
+            mask_init = np.array([mask_init for _ in self.wave])
+
+        # loop set values
+        for set_range_ in set_range:
+            mask_init = np.where(np.logical_and(self.wave >= set_range_[0],
+                                                self.wave <= set_range_[1]),
+                                 set_val, mask_init)
+
+        return mask_init
 
 
 def _test_repr():

@@ -25,8 +25,9 @@ Aims
 
 import numpy as np
 from scipy.optimize import minimize
+from joblib import Parallel, delayed
 
-from costfunction import chi2_simple_1d
+from .costfunction import chi2_simple_1d
 
 
 def predict_pixel(svr, X_, mask=True):
@@ -120,9 +121,10 @@ def predict_labels(X0, svrs, test_flux, test_ivar=None, mask=None,
         test_ivar = ivar_scaler.transform(test_ivar.reshape(1, -1)).flatten()
 
     # do minimization using Nelder-Mead method [tol=1.e-8 set by user!]
-    X_pred = minimize(costfun_from_label, X0,
+    X_pred = minimize(costfun_for_label, X0,
                       args=(svrs, test_flux, test_ivar, mask),
                       method='Nelder-Mead', **kwargs)
+    print('@Cham: X_init=', X0, 'X_final=', X_pred['x'], 'nit=', X_pred['nit'])
 
     # scale X_pred back if necessary
     if labels_scaler is not None:
@@ -134,7 +136,7 @@ def predict_labels(X0, svrs, test_flux, test_ivar=None, mask=None,
     return X_pred
 
 
-def costfun_from_label(X_, svrs, test_flux, test_ivar, mask):
+def costfun_for_label(X_, svrs, test_flux, test_ivar, mask):
     """ calculate (ivar weighted) chi2 for a single spectrum
 
     Parameters
@@ -167,3 +169,37 @@ def costfun_from_label(X_, svrs, test_flux, test_ivar, mask):
 
     # calculate chi2
     return chi2_simple_1d(test_flux, pred_flux, ivar=test_ivar)
+
+
+def predict_labels_chi2(tplt_flux, tplt_labels, test_flux, test_ivar,
+                        n_jobs=1, verbose=False):
+    """ a quick search for initial values of test_labels for test_flux
+
+    NOTE
+    ----
+    this is a nested function
+
+    """
+
+    assert tplt_flux.ndim == 2 and tplt_labels.ndim == 2
+
+    if test_flux.ndim == 1:
+        # only one test_flux
+        # n_test = 1
+        assert tplt_flux.shape[1] == test_flux.shape[0]
+
+        i_min = np.argsort(
+            np.sum(np.sqrt(tplt_flux - test_flux) * test_ivar, axis=1)
+        ).flatten()[0]
+
+        return tplt_labels[i_min, :]
+
+    else:
+        n_test = test_flux.shape[0]
+        results = Parallel(n_jobs=n_jobs, verbose=verbose)(
+            delayed(predict_labels_chi2)(
+                tplt_flux, tplt_labels, test_flux[i, :], test_ivar[i, :])
+            for i in range(n_test)
+        )
+
+        return np.array(results)
