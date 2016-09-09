@@ -33,7 +33,9 @@ from .extern.interpolate import SmoothSpline
 def normalize_spectrum(wave, flux, norm_range, dwave,
                        p=(1E-6, 1E-6), q=0.5, ivar=None, eps=1e-10):
     """ A double smooth normalization of a spectrum
+
     Converted from Chao Liu's normSpectrum.m
+    Updated by Bo Zhang
 
     Parameters
     ----------

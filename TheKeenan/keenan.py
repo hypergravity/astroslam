@@ -431,18 +431,20 @@ class Keenan(object):
         return X_pred
 
     def predict_labels_quick(self, test_flux, test_ivar,
-                             tplt_flux=None, tplt_labels=None,
+                             tplt_flux=None, tplt_labels=None, n_sparse=1,
                              n_jobs=1, verbose=False):
         """ a quick chi2 search for labels """
 
         if tplt_flux is None and tplt_labels is None:
             # use default tplt_flux & tplt_labels
-            X_quick = predict_labels_chi2(self.tr_flux, self.tr_labels,
+            X_quick = predict_labels_chi2(self.tr_flux[::n_sparse, :],
+                                          self.tr_labels[::n_sparse, :],
                                           test_flux, test_ivar,
                                           n_jobs=n_jobs, verbose=verbose)
         else:
             # use user-defined tplt_flux & tplt_labels
-            X_quick = predict_labels_chi2(tplt_flux, tplt_labels,
+            X_quick = predict_labels_chi2(tplt_flux[::n_sparse, :],
+                                          tplt_labels[::n_sparse, :],
                                           test_flux, test_ivar,
                                           n_jobs=n_jobs, verbose=verbose)
 
@@ -576,7 +578,7 @@ class Keenan(object):
 
         return X_pred
 
-    def predict_spectra(self, X_pred, scaler=True):
+    def predict_spectra(self, X_pred, scaler=True, n_jobs=1, verbose=False):
         """ predict spectra using trained SVRs
 
         Parameters
@@ -590,12 +592,19 @@ class Keenan(object):
             predicted spectra
 
         """
+        if X_pred.ndim == 1:
+            X_pred = X_pred.reshape(1, -1)
+
         if scaler:
             X_pred = self.tr_labels_scaler.transform(X_pred)
 
-        pred_flux = predict_spectrum(self.svrs, X_pred)
+        n_pred = X_pred.shape[0]
+        flux_pred = Parallel(n_jobs=n_jobs, verbose=verbose)(
+            delayed(predict_spectrum)(self.svrs, X_pred[i])
+            for i in range(n_pred)
+        )
 
-        return pred_flux
+        return np.array(flux_pred)
 
     # ####################### #
     #     daignostics         #
