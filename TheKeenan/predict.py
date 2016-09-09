@@ -48,16 +48,18 @@ def predict_spectrum(svrs, X_, mask=None, scaler=None):
 
     Parameters
     ----------
-    svrs: list
+    svrs : list
         a list of svr objects
-    mask: None | bool array
+    X_ : ndarray
+        the labels of predicted spectra
+    mask : None | bool array
         predict the pixels where mask==True
-    scaler: scaler object
+    scaler : scaler object
         if not None, scale X_ before predictions using this scaler
 
     Returns
     -------
-    ys: ndarray
+    ys : ndarray
         predicted spectra
 
     """

@@ -632,6 +632,43 @@ class Keenan(object):
 
         return mask_init
 
+    # ####################### #
+    #     check model         #
+    # ####################### #
+
+    def check_model_pixel(self, X_pred=None, ind_pix=None, scaler=True):
+        """ check one pixel model: prediction vs training
+
+        Parameters
+        ----------
+        ind_pix: ndarray (1D)
+            index of pixels that will be compared
+            indix are numbers, not True/False
+
+        """
+        # default X_pred
+        if X_pred is None:
+            X_pred = self.tr_labels
+
+        # select pixels
+        if ind_pix is None:
+            # compare all pixels
+            ind_pix = np.arange(self.tr_flux.shape[0])  # n_obs
+        elif ind_pix.ndim > 1:
+            # ind_pix is ndarray > 1D
+            ind_pix = ind_pix.flatten()
+
+        # scaler labels if necessary
+        if scaler:
+            X_pred = self.tr_labels_scaler.transform(X_pred)
+
+        # predict pixels
+        flux_tr = self.tr_flux[:, ind_pix]
+        svrs = [self.svrs[i] for i in ind_pix]
+        flux_pred = predict_spectrum(svrs, X_pred)
+
+        return flux_tr, flux_pred
+
 
 def _test_repr():
     wave = np.arange(5000, 6000)
