@@ -35,6 +35,7 @@ from .hyperparameter import summarize_hyperparameters_to_table, summarize_table
 from .predict import predict_labels, predict_labels_chi2, predict_spectrum
 from .standardization import standardize, standardize_ivar
 from .train import train_multi_pixels
+from .mcmc import predict_label_mcmc
 
 __all__ = ['Keenan']
 
@@ -346,7 +347,6 @@ class Keenan(object):
             will be set True
 
         """
-        # TODO: training taking into account the tr_ivar!
         # training
         results = train_multi_pixels(self.tr_labels_scaled,
                                      [y for y in self.tr_flux_scaled.T],
@@ -451,8 +451,8 @@ class Keenan(object):
         return X_quick
 
     # in this method, do not use scaler defined in predict_labels()
-    def predict_labels_multi(self, X0, test_flux, test_ivar=None, mask=None,
-                             flux_scaler=True, ivar_scaler=True,
+    def predict_labels_multi(self, X0, test_flux, test_ivar=None,
+                             mask=None, flux_scaler=True, ivar_scaler=True,
                              labels_scaler=True, n_jobs=1, verbose=False,
                              **kwargs):
         """ predict labels for a given test spectrum (multiple)
@@ -577,6 +577,173 @@ class Keenan(object):
             X_pred = labels_scaler.inverse_transform(X_pred)
 
         return X_pred
+
+    # in this method, do not use scaler defined in predict_labels()
+    def predict_labels_mcmc(self, X0, test_flux, test_ivar=None,
+                            mask=None, flux_scaler=True, ivar_scaler=True,
+                            labels_scaler=True, n_jobs=1, verbose=False,
+                            n_walkers=10, n_burnin=200, n_run=500, threads=1,
+                            return_chain=False,
+                            *args, **kwargs):
+        """ predict labels for a given test spectrum (multiple)
+
+        Parameters
+        ----------
+        X0 : ndarray (1 x n_dim)
+            the initial guess of predicted label
+        test_flux : ndarray (n_test, n_pix)
+            test flux array
+        test_ivar : ndarray (n_test, n_pix)
+            test ivar array
+        mask : bool ndarray (n_test, n_pix)
+            manual mask, False pixels are not evaluated for speed up
+        flux_scaler : scaler object
+            flux scaler. if False, it doesn't perform scaling
+        labels_scaler : scaler object
+            labels scaler. if False, it doesn't perform scaling
+        n_jobs: int
+            number of processes launched by joblib
+        verbose: int
+            verbose level
+
+        kwargs :
+            extra parameters passed to *minimize()*
+            **tol** should be specified by user according to n_pix
+
+        NOTE
+        ----
+        ** all input should be 2D array or sequential **
+
+        """
+        # 0. determine n_test
+        n_test = test_flux.shape[0]
+
+        # 1. default scalers
+        if flux_scaler:
+            flux_scaler = self.tr_flux_scaler
+        else:
+            flux_scaler = None
+
+        if ivar_scaler:
+            ivar_scaler = self.tr_ivar_scaler
+        else:
+            ivar_scaler = None
+
+        if labels_scaler:
+            labels_scaler = self.tr_labels_scaler
+        else:
+            labels_scaler = None
+
+        # 2. scale test_flux
+        if flux_scaler is not None:
+            test_flux = flux_scaler.transform(test_flux)
+
+        # 3. set default mask, test_ivar
+
+        # mask must be set here!
+        if mask is None:
+            # no mask is set
+            mask = np.ones_like(test_flux, dtype=np.bool)
+        elif mask.ndim == 1 and len(mask) == test_flux.shape[1]:
+            # if only one mask is specified
+            mask = np.array([mask for _ in range(n_test)])
+
+        # 4. scale test_ivar
+
+        # test_ivar must be set here!
+        if test_ivar is None:
+            # test_ivar=None, directly set test_ivar
+            test_ivar = np.ones_like(test_flux, dtype=np.float)
+        # test_ivar is not None
+        elif ivar_scaler is not None:
+            # do scaling for test_ivar
+            test_ivar = ivar_scaler.transform(test_ivar)
+            # else:
+            # don't do scaling for test_ivar
+
+        # 5. update test_ivar : negative ivar set to 0
+        test_ivar = np.where(test_ivar < 0.,
+                             np.zeros_like(test_ivar), test_ivar)
+        test_ivar = np.where(np.isnan(test_ivar),
+                             np.zeros_like(test_ivar), test_ivar)
+        test_ivar = np.where(np.isinf(test_ivar),
+                             np.zeros_like(test_ivar), test_ivar)
+
+        # 6. update mask for low ivar pixels
+        test_ivar_threshold = np.array(
+            [np.median(_[_ > 0]) * 0.05 for _ in test_ivar]).reshape(-1, 1)
+        mask = np.where(test_ivar < test_ivar_threshold,
+                        np.zeros_like(mask, dtype=np.bool), mask)
+
+        # 7. test_ivar normalization
+        test_ivar /= np.sum(test_ivar, axis=1).reshape(-1, 1)
+
+        assert test_flux.shape == test_ivar.shape
+        assert test_flux.shape == mask.shape
+
+        # 8. if you want different initial values ...
+        if X0.ndim == 1:
+            # only one initial guess is set
+            X0 = X0.reshape(1, -1).repeat(n_test, axis=0)
+        elif X0.shape[0] == 1:
+            # only one initial guess is set, but 2D shape
+            X0 = X0.reshape(1, -1).repeat(n_test, axis=0)
+
+        if labels_scaler is not None:
+            X0 = labels_scaler.transform(X0)
+
+        # 9. loop predictions
+        results = Parallel(n_jobs=n_jobs, verbose=verbose)(
+            delayed(predict_label_mcmc)(
+                X0[i], self.svrs, test_flux[i], test_ivar[i], mask[i],
+                n_walkers=n_walkers, n_burnin=n_burnin,
+                n_run=n_run, threads=threads,
+                return_chain=return_chain,
+                *args, **kwargs) for i in range(n_test)
+        )
+
+        # 10. scale X_pred back if necessary
+        # print("X_pred: ", X_pred)
+        print("@Cham: wait a minute, I'm converting results ...")
+        print("RESULTS0: ", results[0])
+        if return_chain:
+            # return X_pred, flatchain
+            X_predm = []
+            X_predl = []
+            X_predu = []
+            flatchain = []
+            for X_pred_, flatchain_ in results:
+                X_predl.append(X_pred_[0])
+                X_predm.append(X_pred_[1])
+                X_predu.append(X_pred_[2])
+                flatchain.append(flatchain_)
+
+            if labels_scaler is not None:
+                # scale back
+                X_predl = labels_scaler.inverse_transform(np.array(X_predl))
+                X_predm = labels_scaler.inverse_transform(np.array(X_predm))
+                X_predu = labels_scaler.inverse_transform(np.array(X_predu))
+                flatchain = [labels_scaler.inverse_transform(_) for _ in
+                             flatchain]
+
+            return X_predl, X_predm, X_predu, flatchain
+
+        else:
+            X_predm = []
+            X_predl = []
+            X_predu = []
+            for X_pred_ in results:
+                X_predl.append(X_pred_[0])
+                X_predm.append(X_pred_[1])
+                X_predu.append(X_pred_[2])
+
+            if labels_scaler is not None:
+                # scale back
+                X_predl = labels_scaler.inverse_transform(np.array(X_predl))
+                X_predm = labels_scaler.inverse_transform(np.array(X_predm))
+                X_predu = labels_scaler.inverse_transform(np.array(X_predu))
+
+            return X_predl, X_predm, X_predu
 
     def predict_spectra(self, X_pred, scaler=True, n_jobs=1, verbose=False):
         """ predict spectra using trained SVRs
