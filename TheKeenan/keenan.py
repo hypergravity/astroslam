@@ -582,6 +582,7 @@ class Keenan(object):
     def predict_labels_mcmc(self, X0, test_flux, test_ivar=None,
                             mask=None, flux_scaler=True, ivar_scaler=True,
                             labels_scaler=True, n_jobs=1, verbose=False,
+                            X_lb=None, X_ub=None,
                             n_walkers=10, n_burnin=200, n_run=500, threads=1,
                             return_chain=False,
                             *args, **kwargs):
@@ -675,8 +676,8 @@ class Keenan(object):
         mask = np.where(test_ivar < test_ivar_threshold,
                         np.zeros_like(mask, dtype=np.bool), mask)
 
-        # 7. test_ivar normalization
-        test_ivar /= np.sum(test_ivar, axis=1).reshape(-1, 1)
+        # 7. test_ivar normalization --> not necessary
+        # test_ivar /= np.sum(test_ivar, axis=1).reshape(-1, 1)
 
         assert test_flux.shape == test_ivar.shape
         assert test_flux.shape == mask.shape
@@ -690,12 +691,36 @@ class Keenan(object):
             X0 = X0.reshape(1, -1).repeat(n_test, axis=0)
 
         if labels_scaler is not None:
+            # scale
             X0 = labels_scaler.transform(X0)
+
+            if X_lb is not None:
+                theta_lb = labels_scaler.transform(X_lb)
+            else:
+                theta_lb = np.ones(X0[0].shape) * -10.
+
+            if X_ub is not None:
+                theta_ub = labels_scaler.transform(X_ub)
+            else:
+                theta_ub = np.ones(X0[0].shape) * 10.
+
+        else:
+            # don't scale
+            if X_lb is not None:
+                theta_lb = X_lb
+            else:
+                theta_lb = np.ones(X0[0].shape) * -10.
+
+            if X_ub is not None:
+                theta_ub = X_ub
+            else:
+                theta_ub = np.ones(X0[0].shape) * 10.
 
         # 9. loop predictions
         results = Parallel(n_jobs=n_jobs, verbose=verbose)(
             delayed(predict_label_mcmc)(
                 X0[i], self.svrs, test_flux[i], test_ivar[i], mask[i],
+                theta_lb=theta_lb, theta_ub=theta_ub,
                 n_walkers=n_walkers, n_burnin=n_burnin,
                 n_run=n_run, threads=threads,
                 return_chain=return_chain,

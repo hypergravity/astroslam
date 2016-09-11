@@ -66,11 +66,11 @@ def lnlike_gaussian(theta, svrs, flux_obs, flux_ivar, mask):
     flux_pred = predict_spectrum(svrs, theta, mask=mask)
 
     # Gaussian likelihood
-    return 0.5 * np.nansum(flux_ivar * (flux_obs - flux_pred) +
-                           np.log(2. * np.pi / flux_ivar))
+    return - 0.5 * np.nansum((flux_obs - flux_pred) ** 2. * flux_ivar +
+                             np.log(2. * np.pi / flux_ivar))
 
 
-def lnprior_uniform(theta):
+def lnprior_uniform(theta, theta_lb, theta_ub):
     """ loose uniform prior for theta
 
     Parameters
@@ -81,14 +81,15 @@ def lnprior_uniform(theta):
     """
     theta = np.array(theta)
 
-    if np.all(-np.inf < theta) and np.all(theta < np.inf):
+    # if np.all(-np.inf < theta) and np.all(theta < np.inf):
+    if np.all(theta_lb < theta) and np.all(theta < theta_ub):
         # reasonable theta
         return 0.
     # unreasonable theta
     return -np.inf
 
 
-def lnprob(theta, svrs, flux_obs, flux_ivar, mask):
+def lnprob(theta, svrs, flux_obs, flux_ivar, mask, theta_lb, theta_ub):
     """ posterior probability function
 
     Parameters
@@ -114,7 +115,7 @@ def lnprob(theta, svrs, flux_obs, flux_ivar, mask):
 
     """
     # calculate prior
-    lp = lnprior_uniform(theta)
+    lp = lnprior_uniform(theta, theta_lb, theta_ub)
 
     if not np.isfinite(lp):
         # if prior is unreasonable (-inf), avoiding lnlike computing
@@ -127,15 +128,22 @@ def lnprob(theta, svrs, flux_obs, flux_ivar, mask):
 
 
 def predict_label_mcmc(theta0, svrs, flux_obs, flux_ivar, mask,
+                       theta_lb=None, theta_ub=None,
                        n_walkers=10, n_burnin=200, n_run=500, threads=1,
                        return_chain=False,
                        *args, **kwargs):
     n_dim = len(theta0)
 
+    if theta_lb is None:
+        theta_lb = np.ones_like(theta0) * -10.
+    if theta_ub is None:
+        theta_ub = np.ones_like(theta0) * 10.
+
     # instantiate
     sampler = EnsembleSampler(n_walkers, n_dim, lnprob,
-                              args=(svrs, flux_obs, flux_ivar, mask),
-                              threads=threads)
+                              args=(svrs, flux_obs, flux_ivar, mask,
+                                    theta_lb, theta_ub),
+                              threads=threads)  # **kwargs?
 
     # burn in
     pos0 = [theta0 + np.random.randn(len(theta0)) * 0.001 for _ in
