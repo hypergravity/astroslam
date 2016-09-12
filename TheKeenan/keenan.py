@@ -584,7 +584,7 @@ class Keenan(object):
                             labels_scaler=True, n_jobs=1, verbose=False,
                             X_lb=None, X_ub=None,
                             n_walkers=10, n_burnin=200, n_run=500, threads=1,
-                            return_chain=False,
+                            return_chain=False, mcmc_run_max_iter=3,
                             *args, **kwargs):
         """ predict labels for a given test spectrum (multiple)
 
@@ -724,6 +724,7 @@ class Keenan(object):
                 n_walkers=n_walkers, n_burnin=n_burnin,
                 n_run=n_run, threads=threads,
                 return_chain=return_chain,
+                mcmc_run_max_iter=mcmc_run_max_iter,
                 *args, **kwargs) for i in range(n_test)
         )
 
