@@ -584,7 +584,8 @@ class Keenan(object):
                             labels_scaler=True, n_jobs=1, verbose=False,
                             X_lb=None, X_ub=None,
                             n_walkers=10, n_burnin=200, n_run=500, threads=1,
-                            return_chain=False, mcmc_run_max_iter=3,
+                            return_chain=False, mcmc_run_max_iter=3, mcc=0.4,
+                            prompts=None,
                             *args, **kwargs):
         """ predict labels for a given test spectrum (multiple)
 
@@ -716,6 +717,8 @@ class Keenan(object):
             else:
                 theta_ub = np.ones(X0[0].shape) * 10.
 
+        if prompts is None:
+            prompts = [i for i in range(n_test)]
         # 9. loop predictions
         results = Parallel(n_jobs=n_jobs, verbose=verbose)(
             delayed(predict_label_mcmc)(
@@ -725,6 +728,8 @@ class Keenan(object):
                 n_run=n_run, threads=threads,
                 return_chain=return_chain,
                 mcmc_run_max_iter=mcmc_run_max_iter,
+                mcc=mcc,
+                prompt=prompts[i],
                 *args, **kwargs) for i in range(n_test)
         )
 

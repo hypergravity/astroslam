@@ -29,7 +29,7 @@ from emcee import EnsembleSampler
 from .predict import predict_spectrum
 
 eps = 1e-10  # Once flux_ivar < eps, these pixels are ignored
-stablechain_corrcoef_threshold = 0.1
+stablechain_corrcoef_threshold = 0.4
 
 
 def lnlike_gaussian(theta, svrs, flux_obs, flux_ivar, mask):
@@ -131,79 +131,65 @@ def lnprob(theta, svrs, flux_obs, flux_ivar, mask, theta_lb, theta_ub):
 def predict_label_mcmc(theta0, svrs, flux_obs, flux_ivar, mask,
                        theta_lb=None, theta_ub=None,
                        n_walkers=10, n_burnin=200, n_run=500, threads=1,
-                       return_chain=False, mcmc_run_max_iter=3,
+                       return_chain=False, mcmc_run_max_iter=5, mcc=0.4,
                        prompt=None, *args, **kwargs):
+    """ predict labels using emcee MCMC """
+    # theta length
     n_dim = len(theta0)
 
+    # default theta lower/upper bounds
     if theta_lb is None:
         theta_lb = np.ones_like(theta0) * -10.
     if theta_ub is None:
         theta_ub = np.ones_like(theta0) * 10.
 
-    # instantiate
+    # instantiate EnsambleSampler
     sampler = EnsembleSampler(n_walkers, n_dim, lnprob,
                               args=(svrs, flux_obs, flux_ivar, mask,
                                     theta_lb, theta_ub),
                               threads=threads)  # **kwargs?
 
-    # state of this estimate
-    state_inbounds = True
-    state_mcc = True
-    state_exit = False
-
     # burn in
-    pos0 = [theta0 + np.random.uniform(-1, 1, size=(len(theta0),)) * 0.001
+    pos0 = [theta0 + np.random.uniform(-1, 1, size=(len(theta0),)) * 1.e-3
             for _ in range(n_walkers)]
     pos, prob, rstate = sampler.run_mcmc(pos0, n_burnin)
 
-    pos_best = sampler.flatchain[np.argsort(sampler.flatlnprobability)[-1]]
-
     # run mcmc
     for i_run in range(mcmc_run_max_iter):
-        print("i_run: ", i_run)
+        print("--------------------------------------------------------------")
+        print(prompt, " i_run : ", i_run)
+        print(prompt, " Current pos : \n", pos)
 
-        sampler.reset()
-        pos, prob, rstate = sampler.run_mcmc(pos, n_run)
+        # new position
+        pos_new, state, pos_best = check_chains(
+            sampler, pos, theta_lb, theta_ub, mode_list=['bounds'])
+        print(prompt, " New pos : ", pos_new)
+        print(prompt, " Best pos : ", pos_best)
 
-        print("@Cham: Current pos, ", pos)
-        # do check chains
-        # 1> check bounds and concentration
-        bad_chain_mask, mm, mbest = flatchain_mean_std_check(
-            sampler.flatchain, sampler.flatlnprobability,
-            n_run, theta_lb, theta_ub)
-        print(bad_chain_mask, mm, mbest)
+        if np.any(np.logical_not(state)):
+            print(prompt, " Chain states : ", state)
+            print(
+            prompt, " RESET chain : ", np.arange(0, len(state) + 1)[state])
 
-        if np.any(bad_chain_mask):
-            # any bad chain, ignore correlation check
-            for i_chain, bad_chain_mask_ in enumerate(bad_chain_mask):
-                if bad_chain_mask_:
-                    # this is a bad chain, change pos
-                    pos_new = mbest * (
-                        1. + np.random.uniform(-1., 1.,
-                                               size=mbest.shape) * 1.e-5)
-                    print("@Cham: chain [%s] is reset %s -> %s" %
-                          (i_chain, pos[i_chain], pos_new))
-                    pos[i_chain] = pos_new
-            state_inbounds = False
-            continue
-        else:
-            state_inbounds = True
+        # maximum correlation coefficients
+        mcc_qtl, mcc_mat = sampler_mcc(sampler)
+        # state_mcc = True --> not any out of threshold --> good chain
+        state_mcc = ~np.any(np.abs(mcc_qtl) >= mcc)
 
-        # if no chain is reset, then ...
-        # 2> max correlation coefficients
-        mcc = flatchain_corrcoef_max(sampler.flatchain, n_run)
-        print("mcc: ", mcc)
-        if mcc >= stablechain_corrcoef_threshold:
-            # unstable chain
-            state_mcc = False
-            continue
-        else:
-            # stable chain
-            state_mcc = True
-            state_exit = True
+        print(prompt, " MCC quantiles : ", mcc_qtl, " ################### ")
+        # print(prompt, " MCC_MAT : -----------------------------------------")
+        # for i in range(mcc_mat.shape[2]):
+        #     print(prompt, " MCC_MAT[:,:,%s]: " % i, mcc_mat[:, :, i])
+
+        # if chains are good, break and do statistics
+        if state_mcc:
             break
 
-    print(state_inbounds, state_mcc, state_exit)
+        # else continue running
+        sampler.reset()
+        pos, prob, rstate = sampler.run_mcmc(pos_new, n_run)
+
+    print(prompt, ' state_mcc : ', state_mcc)
 
     # estimate percentiles
     theta_est_mcmc = np.percentile(sampler.flatchain, [15., 50., 85.], axis=0)
@@ -223,6 +209,59 @@ def predict_label_mcmc(theta0, svrs, flux_obs, flux_ivar, mask,
         return theta_est_mcmc, sampler.flatchain
 
 
+def theta_between(theta, theta_lb, theta_ub):
+    """ check if theta is between [theta_lb, theta_ub] """
+    state = np.all(theta.flatten() >= theta_lb.flatten()) and \
+            np.all(theta.flatten() <= theta_ub.flatten())
+    return state
+
+
+def check_chains(sampler, pos, theta_lb, theta_ub,
+                 mode_list=['bounds']):
+    """ check chains
+
+    1> reset out-of-bound chains
+    2> reset all chains to max likelihood neighbours
+    """
+    mode_all = ['bounds', 'reset_all']
+
+    for mode in mode_list:
+        assert mode in mode_all
+
+    n_walkers, n_step, n_dim = sampler.chain.shape
+
+    # state of each chain
+    state = np.ones((n_walkers,), dtype=np.bool)
+
+    # the best position
+    pos_best = sampler.flatchain[np.argsort(sampler.flatlnprobability)[-1]]
+
+    # 'bounds' : chain pos should be between theta_lb, theta_ub
+    if 'bounds' in mode_list:
+        state = np.logical_and(state, np.array(
+            [theta_between(pos[i], theta_lb, theta_ub) for i in
+             range(n_walkers)]))
+
+    # 'reset_all' : reset all chains
+    if 'reset_all' in mode_list:
+        state = np.logical_and(state,
+                               np.zeros((n_walkers,), dtype=np.bool))
+
+    # determine new pos
+    pos_new = []
+    for i, state_ in enumerate(state):
+        if not state_:
+            # state_ = False, reset
+            pos_new.append(pos_best +
+                           np.random.uniform(-1, 1,
+                                             size=pos_best.shape) * 1.e-3)
+        else:
+            pos_new.append(pos[i])
+
+    return np.array(pos_new), state, pos_best
+
+
+# deprecated
 def flatchain_mean_std_check(fchain, fprob, n_step, theta_lb, theta_ub):
     """ calculate correlation coefficients of chains
 
@@ -264,6 +303,7 @@ def flatchain_mean_std_check(fchain, fprob, n_step, theta_lb, theta_ub):
     return bad_chain_mask, mm, mbest
 
 
+# deprecated
 def flatchain_mean_std(fchain, n_step):
     """ calculate correlation coefficients of chains
 
@@ -294,7 +334,8 @@ def flatchain_mean_std(fchain, n_step):
     return m, s
 
 
-def flatchain_corrcoef(fchain, n_step):
+# deprecated
+def flatchain_corrcoef(sampler):
     """ calculate correlation coefficients of chains
 
     Parameters
@@ -310,20 +351,19 @@ def flatchain_corrcoef(fchain, n_step):
         the corrcoef between each pair of chains
 
     """
-    n_chain = fchain.shape[0] / n_step
-    n_dim = fchain.shape[1]
+    n_chain = sampler.k
+    n_dim = sampler.dim
 
     coefs = np.zeros((n_chain, n_chain, n_dim))
     for i in range(n_chain):
-        ind_i = np.arange(i * n_step, (i + 1) * n_step)
         for j in range(n_chain):
-            ind_j = np.arange(j * n_step, (j + 1) * n_step)
             for k in range(n_dim):
-                coefs[i, j, k] = \
-                    np.corrcoef(fchain[ind_i, k], fchain[ind_j, k])[1, 0]
+                coefs[i, j, k] = np.corrcoef(sampler.chain[i, :, k],
+                                             sampler.chain[j, :, k])[1, 0]
     return coefs
 
 
+# deprecated
 def flatchain_corrcoef_mean(fchain, n_step):
     """ calculate correlation coefficients of chains
 
@@ -347,27 +387,34 @@ def flatchain_corrcoef_mean(fchain, n_step):
     return np.mean(coefs) - 1. / n_chain
 
 
-def flatchain_corrcoef_max(fchain, n_step):
-    """ calculate correlation coefficients of chains
+# IMPORTANT : this function is designed to implement "adaptive burn in length"
+def sampler_mcc(sampler):
+    """ calculate correlation coefficient matrix of chains
 
     Parameters
     ----------
-    fchain : ndarray [n_step*n_chain, n_dim]
-        MCMC flatchain
-    n_step : int
-        number of steps of each chain
+    sampler : emcee.EnsembleSampler instance
+        sampler
 
     Returns
     -------
+    mcc_qtl : ndarray [3,]
+        the [25, 50, 75] th percentiles of coefs
     coefs : ndarray [n_chain, n_chain, n_dim]
         the corrcoef between each pair of chains
 
     """
-    n_chain = fchain.shape[0] / n_step
+    n_chain = sampler.k
 
-    coefs = flatchain_corrcoef(fchain, n_step)
+    # correlation coefficient matrix
+    coefs = flatchain_corrcoef(sampler)
+    # set diagonal to 0.
     for idim in range(coefs.shape[2]):
         for ichain in range(n_chain):
-            coefs[ichain, ichain, idim] = 0.
+            coefs[ichain, ichain, idim] = np.nan
 
-    return np.max(np.abs(coefs))
+    # correlation coefficient quantile
+    mcc_qtl = np.nanpercentile(coefs, [25, 50, 75])
+
+    # return quantiles
+    return mcc_qtl, coefs
