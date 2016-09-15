@@ -720,7 +720,7 @@ class Keenan(object):
         if prompts is None:
             prompts = [i for i in range(n_test)]
         # 9. loop predictions
-        results = Parallel(n_jobs=n_jobs, verbose=verbose)(
+        results_mcmc = Parallel(n_jobs=n_jobs, verbose=verbose)(
             delayed(predict_label_mcmc)(
                 X0[i], self.svrs, test_flux[i], test_ivar[i], mask[i],
                 theta_lb=theta_lb, theta_ub=theta_ub,
@@ -734,47 +734,29 @@ class Keenan(object):
         )
 
         # 10. scale X_pred back if necessary
-        # print("X_pred: ", X_pred)
         print("@Cham: wait a minute, I'm converting results ...")
-        print("RESULTS0: ", results[0])
+
+        # prepare theta
+        if labels_scaler is not None:
+            for i in range(len(results_mcmc)):
+                results_mcmc[i]['theta'] = \
+                    labels_scaler.inverse_transform(results_mcmc[i]['theta'])
+        # prepare flatchain
         if return_chain:
-            # return X_pred, flatchain
-            X_predm = []
-            X_predl = []
-            X_predu = []
-            flatchain = []
-            for X_pred_, flatchain_ in results:
-                X_predl.append(X_pred_[0])
-                X_predm.append(X_pred_[1])
-                X_predu.append(X_pred_[2])
-                flatchain.append(flatchain_)
-
+            for i in range(len(results_mcmc)):
+                results_mcmc[i]['flatchain'] = results_mcmc[i][
+                    'sampler'].flatchain
             if labels_scaler is not None:
-                # scale back
-                X_predl = labels_scaler.inverse_transform(np.array(X_predl))
-                X_predm = labels_scaler.inverse_transform(np.array(X_predm))
-                X_predu = labels_scaler.inverse_transform(np.array(X_predu))
-                flatchain = [labels_scaler.inverse_transform(_) for _ in
-                             flatchain]
+                for i in range(len(results_mcmc)):
+                    results_mcmc[i]['flatchain'] = \
+                        labels_scaler.inverse_transform(
+                            results_mcmc[i]['flatchain'])
+        # prepare L M U
+        X_predl = np.array([r['theta'][0] for r in results_mcmc])
+        X_predm = np.array([r['theta'][1] for r in results_mcmc])
+        X_predu = np.array([r['theta'][2] for r in results_mcmc])
 
-            return X_predl, X_predm, X_predu, flatchain
-
-        else:
-            X_predm = []
-            X_predl = []
-            X_predu = []
-            for X_pred_ in results:
-                X_predl.append(X_pred_[0])
-                X_predm.append(X_pred_[1])
-                X_predu.append(X_pred_[2])
-
-            if labels_scaler is not None:
-                # scale back
-                X_predl = labels_scaler.inverse_transform(np.array(X_predl))
-                X_predm = labels_scaler.inverse_transform(np.array(X_predm))
-                X_predu = labels_scaler.inverse_transform(np.array(X_predu))
-
-            return X_predl, X_predm, X_predu
+        return X_predl, X_predm, X_predu, results_mcmc
 
     def predict_spectra(self, X_pred, scaler=True, n_jobs=1, verbose=False):
         """ predict spectra using trained SVRs

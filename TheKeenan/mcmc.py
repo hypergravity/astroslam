@@ -176,13 +176,13 @@ def predict_label_mcmc(theta0, svrs, flux_obs, flux_ivar, mask,
         # state_mcc = True --> not any out of threshold --> good chain
         state_mcc = ~np.any(np.abs(mcc_qtl) >= mcc)
 
-        print(prompt, " MCC quantiles : ", mcc_qtl, " ################### ")
+        print(prompt, " *** MCC quantiles *** : ", mcc_qtl)
         # print(prompt, " MCC_MAT : -----------------------------------------")
         # for i in range(mcc_mat.shape[2]):
         #     print(prompt, " MCC_MAT[:,:,%s]: " % i, mcc_mat[:, :, i])
 
         # if chains are good, break and do statistics
-        if state_mcc:
+        if state_mcc and i_run > 0:
             break
 
         # else continue running
@@ -203,10 +203,18 @@ def predict_label_mcmc(theta0, svrs, flux_obs, flux_ivar, mask,
     #        [ 3.22411158,  5.68827311,  9.08791289],
     #        [ 3.22909087,  5.71157073,  9.17812294]])
 
-    if not return_chain:
-        return theta_est_mcmc
-    else:
-        return theta_est_mcmc, sampler.flatchain
+    result = {'theta': theta_est_mcmc,
+              'state_mcc': state_mcc,
+              'mcc_qtl': mcc_qtl,
+              'mcc_mat': mcc_mat,
+              'i_run': i_run,
+              'sampler': sampler}
+
+    return result
+    # if not return_chain:
+    #     return theta_est_mcmc
+    # else:
+    #     return theta_est_mcmc, sampler.flatchain
 
 
 def theta_between(theta, theta_lb, theta_ub):
