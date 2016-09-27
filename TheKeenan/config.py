@@ -11,6 +11,7 @@ Author: Bo Zhang (bozhang@nao.cas.cn)
 """
 
 PACKAGE_URL = """
-Github url: https://github.com/hypergravity/starlight_wrapper
-PYPI url: https://pypi.python.org/pypi/starlight_wrapper
+Bitbucket url: https://bitbucket.org/hypergravity/thekeenan  # currently private
+Github url:    https://github.com/hypergravity/thekeenan     # in prep.
+PYPI url:      https://pypi.python.org/pypi/thekeenan        # in prep.
 """
