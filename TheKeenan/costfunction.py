@@ -30,9 +30,13 @@ import numpy as np
 from scipy.stats import chisquare
 
 
+__all__ = ['chi2_simple_1d']
+
+
 def chi2_simple_1d(spec_obs, spec_pred, ivar=None):
     """ Calculate ivar-weighted chi-square for two spectra """
     if ivar is not None:
+        # ivar specified
         chi2_value = np.nansum((np.array(spec_obs).flatten() - np.array(
             spec_pred).flatten()) ** 2.)
     else:
