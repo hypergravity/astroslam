@@ -27,6 +27,7 @@ import numpy as np
 from scipy.optimize import minimize
 from joblib import Parallel, delayed
 
+# from .mcmc import lnlike_gaussian
 from .costfunction import chi2_simple_1d
 
 
@@ -126,6 +127,10 @@ def predict_labels(X0, svrs, test_flux, test_ivar=None, mask=None,
     X_pred = minimize(costfun_for_label, X0,
                       args=(svrs, test_flux, test_ivar, mask),
                       method='Nelder-Mead', **kwargs)
+    # nll = lambda *args: -lnlike_gaussian(*args)
+    # X_pred = minimize(nll, X0,
+    #                   args=(svrs, test_flux, test_ivar, mask),
+    #                   method='Nelder-Mead', **kwargs)
     print('@Cham: X_init=', X0, 'X_final=', X_pred['x'], 'nit=', X_pred['nit'])
 
     # scale X_pred back if necessary
@@ -153,7 +158,7 @@ def costfun_for_label(X_, svrs, test_flux, test_ivar, mask):
         predict the pixels where mask==True
 
     """
-    # default is to use all pixels
+    # default is to use all pixels [True->will be used, False->deprecated]
     if mask is None:
         mask = np.ones((len(test_flux),), dtype=np.bool)
 
@@ -162,8 +167,8 @@ def costfun_for_label(X_, svrs, test_flux, test_ivar, mask):
         test_ivar = np.ones_like(test_flux)
     else:
         test_ivar[test_ivar < 0] = 0.
-        # kick more pixels using 0.01 ivar
-        mask = np.logical_and(mask, test_ivar > 0.01 * np.median(test_ivar))
+        # kick more pixels using 0.01 ivar --> NON-PHYSICAL
+        # mask = np.logical_and(mask, test_ivar > 0.01 * np.median(test_ivar))
 
     # do prediction
     pred_flux = predict_spectrum(svrs, X_, mask)

@@ -192,7 +192,7 @@ def predict_label_mcmc(theta0, svrs, flux_obs, flux_ivar, mask,
     print(prompt, ' state_mcc : ', state_mcc)
 
     # estimate percentiles
-    theta_est_mcmc = np.percentile(sampler.flatchain, [15., 50., 85.], axis=0)
+    theta_est_mcmc = np.nanpercentile(sampler.flatchain, [15., 50., 85.], axis=0)
 
     # format of theta_est_mcmc:
     # array([theta_p15,
@@ -220,7 +220,8 @@ def predict_label_mcmc(theta0, svrs, flux_obs, flux_ivar, mask,
 def theta_between(theta, theta_lb, theta_ub):
     """ check if theta is between [theta_lb, theta_ub] """
     state = np.all(theta.flatten() >= theta_lb.flatten()) and \
-            np.all(theta.flatten() <= theta_ub.flatten())
+            np.all(theta.flatten() <= theta_ub.flatten()) #and \
+            # np.all(np.isfinite())
     return state
 
 
@@ -422,7 +423,7 @@ def sampler_mcc(sampler):
             coefs[ichain, ichain, idim] = np.nan
 
     # correlation coefficient quantile
-    mcc_qtl = np.nanpercentile(coefs, [25, 50, 75])
+    mcc_qtl = np.nanpercentile(coefs, [25., 50., 75.])
 
     # return quantiles
     return mcc_qtl, coefs
