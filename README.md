@@ -1,8 +1,18 @@
 # TheKeenan
-A forward model to estimate stellar parameters (e.g., Teff, logg, [Fe/H] and chemical abundances) using Support Vector Regression (SVR), which is a non-parametric method.
+A forward model to estimate stellar parameters (e.g., Teff, logg, [Fe/H] and chemical abundances) using Support Vector Regression (SVR), which in essential is a non-parametric method.
+
 
 # Installation
 `pip install TheKeenan`
 
+
 # Requirements
-`LIBSVM`
+
+- numpy
+- scipy
+- matplotlib
+- astropy
+- sklearn
+- joblib
+- pandas
+- emcee
