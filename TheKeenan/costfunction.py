@@ -50,11 +50,11 @@ def chi2_simple_1d(spec_obs, spec_pred, ivar=None):
 
     """
     if ivar is None:
-        # ivar specified
+        # ivar not specified
         chi2_value = np.nansum((np.array(spec_obs).flatten() - np.array(
             spec_pred).flatten()) ** 2.)
     else:
-        # ivar not specified
+        # ivar specified
         chi2_value = np.nansum((np.array(spec_obs).flatten() - np.array(
             spec_pred).flatten()) ** 2. * np.array(ivar).flatten())
     # print('chi2: ', chi2_value)
