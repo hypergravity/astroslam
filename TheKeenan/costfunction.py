@@ -34,12 +34,27 @@ __all__ = ['chi2_simple_1d']
 
 
 def chi2_simple_1d(spec_obs, spec_pred, ivar=None):
-    """ Calculate ivar-weighted chi-square for two spectra """
-    if ivar is not None:
+    """ Calculate ivar-weighted chi-square for two spectra
+
+    Parameters
+    ----------
+    spec_obs: array-like
+        observed flux
+
+    spec_pred: array-like
+        predicted flux
+
+    ivar: array-like or None
+        inverse variance / weight of pixels
+        if None, assume pixels are even-weighted
+
+    """
+    if ivar is None:
         # ivar specified
         chi2_value = np.nansum((np.array(spec_obs).flatten() - np.array(
             spec_pred).flatten()) ** 2.)
     else:
+        # ivar not specified
         chi2_value = np.nansum((np.array(spec_obs).flatten() - np.array(
             spec_pred).flatten()) ** 2. * np.array(ivar).flatten())
     # print('chi2: ', chi2_value)

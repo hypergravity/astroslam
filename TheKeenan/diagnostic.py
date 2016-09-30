@@ -28,6 +28,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
+__all__ = ['compare_labels', 'compare_spectra']
+
+
 # TODO: compare tr_labels and test_labels / any two sets of labels
 def compare_labels(label1, label2, labelname1='Label1', labelname2='Label2',
                    figsize=None, figpath=None, ):
@@ -39,6 +42,10 @@ def compare_labels(label1, label2, labelname1='Label1', labelname2='Label2',
         label set 1
     label2 : ndarray (n_obs, n_dim)
         label set 2
+    labelname1: string
+        name of label1
+    labelname2: string
+        name of label2
     figsize : tuple of float
         figure size
     figpath : string

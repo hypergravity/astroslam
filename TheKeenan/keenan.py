@@ -451,8 +451,8 @@ class Keenan(object):
         return X_quick
 
     # in this method, do not use scaler defined in predict_labels()
-    def predict_labels_multi(self, X0, test_flux, test_ivar=None,
-                             mask=None, flux_scaler=True, ivar_scaler=True,
+    def predict_labels_multi(self, X0, test_flux, test_ivar=None, mask=None,
+                             flux_eps=None, flux_scaler=True, ivar_scaler=True,
                              labels_scaler=True, n_jobs=1, verbose=False,
                              **kwargs):
         """ predict labels for a given test spectrum (multiple)
@@ -540,10 +540,17 @@ class Keenan(object):
                              np.zeros_like(test_ivar), test_ivar)
 
         # 6. update mask for low ivar pixels
-        test_ivar_threshold = np.array(
-            [np.median(_[_ > 0]) * 0.05 for _ in test_ivar]).reshape(-1, 1)
-        mask = np.where(test_ivar < test_ivar_threshold,
-                        np.zeros_like(mask, dtype=np.bool), mask)
+        # test_ivar_threshold = np.array(
+        #     [np.median(_[_ > 0]) * 0.05 for _ in test_ivar]).reshape(-1, 1)
+        # mask = np.where(test_ivar < test_ivar_threshold,
+        #                 np.zeros_like(mask, dtype=np.bool), mask)
+        #
+        # This is NON-PHYSICAL !
+        # Since the test_ivar is SCALED, could not cut 0.05 median!
+        if flux_eps is not None:
+            mask = np.logical_and(mask, test_flux > flux_eps)
+        else:
+            mask = np.logical_and(mask, test_ivar > 0.)
 
         # 7. test_ivar normalization
         test_ivar /= np.sum(test_ivar, axis=1).reshape(-1, 1)
@@ -579,8 +586,8 @@ class Keenan(object):
         return X_pred
 
     # in this method, do not use scaler defined in predict_labels()
-    def predict_labels_mcmc(self, X0, test_flux, test_ivar=None,
-                            mask=None, flux_scaler=True, ivar_scaler=True,
+    def predict_labels_mcmc(self, X0, test_flux, test_ivar=None, mask=None,
+                            flux_eps=None, flux_scaler=True, ivar_scaler=True,
                             labels_scaler=True, n_jobs=1, verbose=False,
                             X_lb=None, X_ub=None,
                             n_walkers=10, n_burnin=200, n_run=500, threads=1,
@@ -672,10 +679,17 @@ class Keenan(object):
                              np.zeros_like(test_ivar), test_ivar)
 
         # 6. update mask for low ivar pixels
-        test_ivar_threshold = np.array(
-            [np.median(_[_ > 0]) * 0.05 for _ in test_ivar]).reshape(-1, 1)
-        mask = np.where(test_ivar < test_ivar_threshold,
-                        np.zeros_like(mask, dtype=np.bool), mask)
+        # test_ivar_threshold = np.array(
+        #     [np.median(_[_ > 0]) * 0.05 for _ in test_ivar]).reshape(-1, 1)
+        # mask = np.where(test_ivar < test_ivar_threshold,
+        #                 np.zeros_like(mask, dtype=np.bool), mask)
+        #
+        # This is NON-PHYSICAL !
+        # Since the test_ivar is SCALED, could not cut 0.05 median!
+        if flux_eps is not None:
+            mask = np.logical_and(mask, test_flux > flux_eps)
+        else:
+            mask = np.logical_and(mask, test_ivar > 0.)
 
         # 7. test_ivar normalization --> not necessary
         # test_ivar /= np.sum(test_ivar, axis=1).reshape(-1, 1)

@@ -28,6 +28,11 @@ from emcee import EnsembleSampler
 
 from .predict import predict_spectrum
 
+
+__all__ = ['lnlike_gaussian', 'lnprior_uniform', 'lnprob',
+           'predict_label_mcmc', 'predict_spectrum',
+           'theta_between', 'check_chains', 'sampler_mcc']
+
 eps = 1e-10  # Once flux_ivar < eps, these pixels are ignored
 stablechain_corrcoef_threshold = 0.4
 
@@ -37,16 +42,17 @@ def lnlike_gaussian(theta, svrs, flux_obs, flux_ivar, mask):
 
     Parameters
     ----------
-    theta : ndarray
+    theta: ndarray
         the stellar labels
-    flux_obs : ndarray
+    svrs: list
+        a list of sklearn.svm.SVR objects
+    flux_obs: ndarray
         the observed stellar spectrum
-    flux_ivar : ndarray
+    flux_ivar: ndarray
         the inverse variance of observed spectrum
-    scaler :
+    mask:
         label scaler, i.e., tr_labels_scaler
-    svrs : list
-        a list of svm.SVR() objects
+
 
     Returns
     -------
@@ -76,8 +82,12 @@ def lnprior_uniform(theta, theta_lb, theta_ub):
 
     Parameters
     ----------
-    theta : ndarray
+    theta: ndarray
         the stellar labels
+    theta_lb: 2-element ndarray
+        the lower bound of theta
+    theta_ub: 2-element ndarray
+        the upper bound of theta
 
     """
     theta = np.array(theta)
@@ -97,14 +107,15 @@ def lnprob(theta, svrs, flux_obs, flux_ivar, mask, theta_lb, theta_ub):
     ----------
     theta : ndarray
         the stellar labels
-    scaler :
-        label scaler, i.e., tr_labels_scaler
-    svrs : list
-        a list of svm.SVR() objects
+    svrs: list
+        a list of sklearn.svm.SVR objects
     flux_obs : ndarray
         the observed stellar spectrum
     flux_ivar : ndarray
         the inverse variance of observed spectrum
+    mask: bool array
+
+
 
     Returns
     -------
@@ -192,7 +203,7 @@ def predict_label_mcmc(theta0, svrs, flux_obs, flux_ivar, mask,
     print(prompt, ' state_mcc : ', state_mcc)
 
     # estimate percentiles
-    theta_est_mcmc = np.percentile(sampler.flatchain, [15., 50., 85.], axis=0)
+    theta_est_mcmc = np.nanpercentile(sampler.flatchain, [15., 50., 85.], axis=0)
 
     # format of theta_est_mcmc:
     # array([theta_p15,
@@ -220,7 +231,8 @@ def predict_label_mcmc(theta0, svrs, flux_obs, flux_ivar, mask,
 def theta_between(theta, theta_lb, theta_ub):
     """ check if theta is between [theta_lb, theta_ub] """
     state = np.all(theta.flatten() >= theta_lb.flatten()) and \
-            np.all(theta.flatten() <= theta_ub.flatten())
+            np.all(theta.flatten() <= theta_ub.flatten()) #and \
+            # np.all(np.isfinite())
     return state
 
 
@@ -267,6 +279,65 @@ def check_chains(sampler, pos, theta_lb, theta_ub,
             pos_new.append(pos[i])
 
     return np.array(pos_new), state, pos_best
+
+
+# IMPORTANT : this function is designed to implement "adaptive burn in length"
+def sampler_mcc(sampler):
+    """ calculate correlation coefficient matrix of chains
+
+    Parameters
+    ----------
+    sampler : emcee.EnsembleSampler instance
+        sampler
+
+    Returns
+    -------
+    mcc_qtl : ndarray [3,]
+        the [25, 50, 75] th percentiles of coefs
+    coefs : ndarray [n_chain, n_chain, n_dim]
+        the corrcoef between each pair of chains
+
+    """
+    n_chain = sampler.k
+
+    # correlation coefficient matrix
+    coefs = chain_corrcoef(sampler)
+    # set diagonal to np.nan
+    for idim in range(coefs.shape[2]):
+        for ichain in range(n_chain):
+            coefs[ichain, ichain, idim] = np.nan
+
+    # correlation coefficient quantile
+    mcc_qtl = np.nanpercentile(coefs, [25., 50., 75.])
+
+    # return quantiles
+    return mcc_qtl, coefs
+
+
+def chain_corrcoef(sampler):
+    """ calculate correlation coefficients of chains
+
+    Parameters
+    ----------
+    sampler: emcee.EnsembleSampler
+        MCMC flatchain
+
+    Returns
+    -------
+    coefs : ndarray [n_chain, n_chain, n_dim]
+        the corrcoef between each pair of chains
+
+    """
+    n_chain = sampler.k
+    n_dim = sampler.dim
+
+    coefs = np.zeros((n_chain, n_chain, n_dim))
+    for i in range(n_chain):
+        for j in range(n_chain):
+            for k in range(n_dim):
+                coefs[i, j, k] = np.corrcoef(sampler.chain[i, :, k],
+                                             sampler.chain[j, :, k])[1, 0]
+    return coefs
 
 
 # deprecated
@@ -343,35 +414,6 @@ def flatchain_mean_std(fchain, n_step):
 
 
 # deprecated
-def flatchain_corrcoef(sampler):
-    """ calculate correlation coefficients of chains
-
-    Parameters
-    ----------
-    fchain : ndarray [n_step*n_chain, n_dim]
-        MCMC flatchain
-    n_step : int
-        number of steps of each chain
-
-    Returns
-    -------
-    coefs : ndarray [n_chain, n_chain, n_dim]
-        the corrcoef between each pair of chains
-
-    """
-    n_chain = sampler.k
-    n_dim = sampler.dim
-
-    coefs = np.zeros((n_chain, n_chain, n_dim))
-    for i in range(n_chain):
-        for j in range(n_chain):
-            for k in range(n_dim):
-                coefs[i, j, k] = np.corrcoef(sampler.chain[i, :, k],
-                                             sampler.chain[j, :, k])[1, 0]
-    return coefs
-
-
-# deprecated
 def flatchain_corrcoef_mean(fchain, n_step):
     """ calculate correlation coefficients of chains
 
@@ -390,39 +432,6 @@ def flatchain_corrcoef_mean(fchain, n_step):
     """
     n_chain = fchain.shape[0] / n_step
 
-    coefs = flatchain_corrcoef(fchain, n_step)
+    coefs = chain_corrcoef(fchain, n_step)
 
     return np.mean(coefs) - 1. / n_chain
-
-
-# IMPORTANT : this function is designed to implement "adaptive burn in length"
-def sampler_mcc(sampler):
-    """ calculate correlation coefficient matrix of chains
-
-    Parameters
-    ----------
-    sampler : emcee.EnsembleSampler instance
-        sampler
-
-    Returns
-    -------
-    mcc_qtl : ndarray [3,]
-        the [25, 50, 75] th percentiles of coefs
-    coefs : ndarray [n_chain, n_chain, n_dim]
-        the corrcoef between each pair of chains
-
-    """
-    n_chain = sampler.k
-
-    # correlation coefficient matrix
-    coefs = flatchain_corrcoef(sampler)
-    # set diagonal to 0.
-    for idim in range(coefs.shape[2]):
-        for ichain in range(n_chain):
-            coefs[ichain, ichain, idim] = np.nan
-
-    # correlation coefficient quantile
-    mcc_qtl = np.nanpercentile(coefs, [25, 50, 75])
-
-    # return quantiles
-    return mcc_qtl, coefs
