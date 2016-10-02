@@ -32,7 +32,24 @@ from .costfunction import chi2_simple_1d
 
 
 def predict_pixel(svr, X_, mask=True):
-    """ predict single pixels for a given wavelength """
+    """ predict single pixels for a given wavelength
+
+    Parameters
+    ----------
+    svr: sklearn.svm.SVR instance
+        the pixel SVR to diagnostic
+    X_: ndarray ( :, ndim )
+        test_labels that will be evaluated
+    mask: bool
+        if True, evaluate
+        if False, pass
+
+    Returns
+    -------
+    y: ndarray
+        predicted flux
+
+    """
     assert X_.ndim == 2
 
     # print('mask: ', mask)
@@ -210,3 +227,33 @@ def predict_labels_chi2(tplt_flux, tplt_labels, test_flux, test_ivar,
         )
 
         return np.array(results)
+
+
+def predict_pixel_for_diagnostic(svr, test_labels, labels_scaler=None, flux_scaler=None):
+    """
+
+    Parameters
+    ----------
+    svr: sklearn.svm.SVR instance
+        the pixel SVR to diagnostic
+    test_labels: ndarray ( :, ndim )
+        test_labels that will be evaluated
+    labels_scaler: sklearn.preprocessing.StandardScaler
+        the scaler for labels
+    flux_scaler: sklearn.preprocessing.StandardScaler
+        the scaler for flux
+
+    Returns
+    -------
+    test_flux
+
+    """
+    if labels_scaler is not None:
+        test_labels = labels_scaler.transform(test_labels)
+
+    test_flux = predict_pixel(svr, test_labels, mask=True)[:, None]
+
+    if flux_scaler is not None:
+        test_flux = flux_scaler.inverse_transform(test_flux)
+
+    return test_flux

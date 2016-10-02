@@ -27,6 +27,8 @@ Aims
 import numpy as np
 import matplotlib.pyplot as plt
 
+from .predict import predict_pixel_for_diagnostic
+
 
 __all__ = ['compare_labels', 'compare_spectra']
 
@@ -95,3 +97,24 @@ def compare_labels(label1, label2, labelname1='Label1', labelname2='Label2',
 # TODO: compare spectra!!! urgently!!!
 def compare_spectra(spectra1, spectra2, ofst_step=0.2, plt_max=100):
     pass
+
+
+# TODO: diagnostic for 1D/2D
+def single_pixel_diagnostic(svr, test_labels, diag_dim=(1,), labels_scaler=None, flux_scaler=None):
+    """  diagnostic a single pixel
+
+    Parameters
+    ----------
+    svr:
+    test_labels
+    diag_dim
+    labels_scaler
+    flux_scaler
+
+    Returns
+    -------
+
+    """
+
+    pass
+
