@@ -36,6 +36,7 @@ from .predict import predict_labels, predict_labels_chi2, predict_spectrum
 from .standardization import standardize, standardize_ivar
 from .train import train_multi_pixels
 from .mcmc import predict_label_mcmc
+from .diagnostic import compare_labels, single_pixel_diagnostic
 
 __all__ = ['Keenan']
 
@@ -532,12 +533,8 @@ class Keenan(object):
             # don't do scaling for test_ivar
 
         # 5. update test_ivar : negative ivar set to 0
-        test_ivar = np.where(test_ivar < 0.,
-                             np.zeros_like(test_ivar), test_ivar)
-        test_ivar = np.where(np.isnan(test_ivar),
-                             np.zeros_like(test_ivar), test_ivar)
-        test_ivar = np.where(np.isinf(test_ivar),
-                             np.zeros_like(test_ivar), test_ivar)
+        test_ivar = np.where((test_ivar >= 0.) * (np.isfinite(test_ivar)),
+                             test_ivar, np.zeros_like(test_ivar))
 
         # 6. update mask for low ivar pixels
         # test_ivar_threshold = np.array(
@@ -804,8 +801,27 @@ class Keenan(object):
     #     daignostics         #
     # ####################### #
 
-    def compare_labels(self):
-        pass
+    @staticmethod
+    def compare_labels(*args, **kwargs):
+        return compare_labels(*args, **kwargs)
+
+    def single_pixel_diagnostic(self,
+                                i_pixel,
+                                test_labels,
+                                diag_dim=(0,),
+                                labels_scaler='default',
+                                flux_scaler='default'):
+        if labels_scaler is 'default':
+            labels_scaler = self.tr_labels_scaler
+        if flux_scaler is 'default':
+            flux_scaler = self.tr_flux_scaler
+
+        return single_pixel_diagnostic(self.svrs,
+                                       i_pixel,
+                                       test_labels,
+                                       diag_dim=diag_dim,
+                                       labels_scaler=labels_scaler,
+                                       flux_scaler=flux_scaler)
 
     # ####################### #
     #     utils               #

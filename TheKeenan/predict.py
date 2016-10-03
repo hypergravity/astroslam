@@ -229,12 +229,16 @@ def predict_labels_chi2(tplt_flux, tplt_labels, test_flux, test_ivar,
         return np.array(results)
 
 
-def predict_pixel_for_diagnostic(svr, test_labels, labels_scaler=None, flux_scaler=None):
+def predict_pixel_for_diagnostic(svr,
+                                 test_labels,
+                                 labels_scaler=None,
+                                 flux_mean_=0.,
+                                 flux_scale_=1.):
     """
 
     Parameters
     ----------
-    svr: sklearn.svm.SVR instance
+    svrs: list of sklearn.svm.SVR instance
         the pixel SVR to diagnostic
     test_labels: ndarray ( :, ndim )
         test_labels that will be evaluated
@@ -248,12 +252,15 @@ def predict_pixel_for_diagnostic(svr, test_labels, labels_scaler=None, flux_scal
     test_flux
 
     """
+    # transform test labels
     if labels_scaler is not None:
         test_labels = labels_scaler.transform(test_labels)
 
+    # predict pixels
     test_flux = predict_pixel(svr, test_labels, mask=True)[:, None]
 
-    if flux_scaler is not None:
-        test_flux = flux_scaler.inverse_transform(test_flux)
+    # inverse transform predicted flux
+    if flux_mean_ is not None and flux_scale_ is not None:
+        test_flux = test_flux * flux_scale_ + flux_mean_
 
     return test_flux

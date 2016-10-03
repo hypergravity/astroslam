@@ -41,9 +41,9 @@ def compare_labels(label1, label2, labelname1='Label1', labelname2='Label2',
     Parameters
     ----------
     label1 : ndarray (n_obs, n_dim)
-        label set 1
+        label set 1 (X)
     label2 : ndarray (n_obs, n_dim)
-        label set 2
+        label set 2 (Y)
     labelname1: string
         name of label1
     labelname2: string
@@ -99,22 +99,58 @@ def compare_spectra(spectra1, spectra2, ofst_step=0.2, plt_max=100):
     pass
 
 
-# TODO: diagnostic for 1D/2D
-def single_pixel_diagnostic(svr, test_labels, diag_dim=(1,), labels_scaler=None, flux_scaler=None):
-    """  diagnostic a single pixel
+def single_pixel_diagnostic(svrs,
+                            i_pixel,
+                            test_labels,
+                            diag_dim=(0,),
+                            labels_scaler=None,
+                            flux_scaler=None):
+    """ diagnostic a single pixel in 1D/2D
 
     Parameters
     ----------
-    svr:
-    test_labels
-    diag_dim
-    labels_scaler
-    flux_scaler
+    svrs: list of sklearn.smv.SVR instance
+        k.svrs
+    i_pixel: int
+        No. of pixel that will be in diagnostic
+    test_labels: ndarray ( n, ndim )
+        test labels
+    diag_dim: tuple/list
+        diagnostic dimensions, e.g., (0, 1)
+    labels_scaler:
+        scaler for labels, e.g., k.tr_labels_scaler
+    flux_scaler:
+        scaler for flux, e.g., k.tr_flux_scaler
 
     Returns
     -------
+    [X, (Y,) flux]
 
     """
+    # assertions
+    assert 1 <= len(diag_dim) <= 2
+    for dim_ in diag_dim:
+        assert 0 <= dim_ <= test_labels.shape[1]
 
-    pass
+    # draw scaling parameters for this pixel
+    if flux_scaler is None:
+        flux_mean_ = 0.
+        flux_scale_ = 1.
+    else:
+        flux_mean_ = flux_scaler.mean_[i_pixel]
+        flux_scale_ = flux_scaler.scale_[i_pixel]
 
+    # prdict flux for this pixel
+    pixel_flux = predict_pixel_for_diagnostic(
+        svrs[i_pixel], test_labels,
+        labels_scaler=labels_scaler,
+        flux_mean_=flux_mean_,
+        flux_scale_=flux_scale_)
+
+    result = []
+    for dim_ in diag_dim:
+        result.append(test_labels[:, dim_])
+    result.append(pixel_flux.flatten())
+
+    # return [X, (Y,) flux]
+    return result
