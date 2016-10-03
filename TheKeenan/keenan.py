@@ -65,6 +65,8 @@ class Keenan(object):
                         names=['C', 'gamma', 'epsilon'])
     scores = np.zeros((0,))
     trained = False
+    sample_weight = None
+    ind_all_bad = None
 
     # ####################### #
     #     Basic functions     #
@@ -321,16 +323,19 @@ class Keenan(object):
     #     training            #
     # ####################### #
 
-    def train_pixels(self, cv=10, n_jobs=10, method='simple', verbose=10,
+    def train_pixels(self, sample_weight_scheme='bool',
+                     cv=10, n_jobs=10, method='simple', verbose=10,
                      *args, **kwargs):
         """ train pixels usig SVR
 
         Parameters
         ----------
-        n_jobs: int
-            number of jobs that will be launched simultaneously
+        sample_weight_scheme: string
+            sample weight scheme for training {'alleven', 'bool', 'ivar'}
         cv: int
             if cv>1, cv-fold Cross-Validation will be performed
+        n_jobs: int
+            number of jobs that will be launched simultaneously
         method: {'simple' | 'grid' | 'rand'}
             simple: directly use user-defined hyper-parameters
             grid: grid search for optimized hyper-parameters
@@ -348,10 +353,35 @@ class Keenan(object):
             will be set True
 
         """
+        # determine sample_weight
+        assert sample_weight_scheme in ('alleven', 'bool', 'ivar')
+        if sample_weight_scheme is 'alleven':
+            # all even (some bad pixels do disturb!)
+            sample_weight = np.ones_like(self.tr_flux_scaled)
+        elif sample_weight_scheme is 'bool':
+            # 0|1 scheme for training flux (recommended)
+            ind_good_pixels = ((self.tr_ivar > 0.) *
+                               (self.tr_flux > 0.) *
+                               np.isfinite(self.tr_ivar) *
+                               np.isfinite(self.tr_flux))
+            sample_weight = ind_good_pixels.astype(np.float)
+            ind_all_bad = np.sum(sample_weight, axis=0) < 1.
+            for i_pix in np.arange(sample_weight.shape[1]):
+                if ind_all_bad[i_pix]:
+                    # this pixel is all bad
+                    # reset sample weight to 1
+                    sample_weight[:, i_pix] = 1.
+            self.ind_all_bad = ind_all_bad
+        elif sample_weight_scheme is 'ivar':
+            # according to ivar (may cause bias due to sampling)
+            sample_weight = self.tr_ivar_scaled
+
+        self.sample_weight = sample_weight
+
         # training
         results = train_multi_pixels(self.tr_labels_scaled,
                                      [y for y in self.tr_flux_scaled.T],
-                                     [None for y in self.tr_flux_scaled.T],
+                                     [sw_ for sw_ in self.sample_weight.T],
                                      cv,
                                      method=method,
                                      n_jobs=n_jobs,
