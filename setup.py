@@ -4,7 +4,7 @@ from distutils.core import setup
 if __name__ == '__main__':
     setup(
         name='TheKeenan',
-        version='0.2.0',
+        version='0.3.0',
         author='Bo Zhang',
         author_email='bozhang@nao.cas.cn',
         description=('A forward model using SVR to estimate stellar parameters'

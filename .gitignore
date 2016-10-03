@@ -1,5 +1,3 @@
-*.iml
-*.xml
 *.html
 *.fits
 *.aux
@@ -15,5 +13,4 @@
 *.ipynb
 MANIFEST
 dist/*
-build/*
-
+build/
