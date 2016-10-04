@@ -214,12 +214,20 @@ def predict_label_mcmc(theta0, svrs, flux_obs, flux_ivar, mask,
     #        [ 3.22411158,  5.68827311,  9.08791289],
     #        [ 3.22909087,  5.71157073,  9.17812294]])
 
-    result = {'theta': theta_est_mcmc,
-              'state_mcc': state_mcc,
-              'mcc_qtl': mcc_qtl,
-              'mcc_mat': mcc_mat,
-              'i_run': i_run,
-              'sampler': sampler}
+    # sampler is not returned, for saving memory
+    if return_chain:
+        result = {'theta': theta_est_mcmc,
+                  'state_mcc': state_mcc,
+                  'mcc_qtl': mcc_qtl,
+                  'mcc_mat': mcc_mat,
+                  'i_run': i_run,
+                  'flatchain': sampler.flatchain}
+    else:
+        result = {'theta': theta_est_mcmc,
+                  'state_mcc': state_mcc,
+                  'mcc_qtl': mcc_qtl,
+                  'mcc_mat': mcc_mat,
+                  'i_run': i_run}
 
     return result
     # if not return_chain:

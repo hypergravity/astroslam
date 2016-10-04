@@ -758,8 +758,10 @@ class Keenan(object):
             else:
                 theta_ub = np.ones(X0[0].shape) * 10.
 
+        # default prompts for MCMC jobs
         if prompts is None:
             prompts = [i for i in range(n_test)]
+
         # 9. loop predictions
         results_mcmc = Parallel(n_jobs=n_jobs, verbose=verbose)(
             delayed(predict_label_mcmc)(
@@ -777,25 +779,23 @@ class Keenan(object):
         # 10. scale X_pred back if necessary
         print("@Cham: wait a minute, I'm converting results ...")
 
-        # prepare theta
+        # inverse-transform theta
         if labels_scaler is not None:
             for i in range(len(results_mcmc)):
                 results_mcmc[i]['theta'] = \
                     labels_scaler.inverse_transform(results_mcmc[i]['theta'])
-        # prepare flatchain
-        if return_chain:
-            for i in range(len(results_mcmc)):
-                results_mcmc[i]['flatchain'] = results_mcmc[i][
-                    'sampler'].flatchain
-            if labels_scaler is not None:
-                for i in range(len(results_mcmc)):
-                    results_mcmc[i]['flatchain'] = \
-                        labels_scaler.inverse_transform(
-                            results_mcmc[i]['flatchain'])
-        # prepare L M U
+
+        # extract L M U from theta
         X_predl = np.array([r['theta'][0] for r in results_mcmc])
         X_predm = np.array([r['theta'][1] for r in results_mcmc])
         X_predu = np.array([r['theta'][2] for r in results_mcmc])
+
+        # if flatchain is returned, inverse-transform flatchain
+        if return_chain and labels_scaler is not None:
+            for i in range(len(results_mcmc)):
+                results_mcmc[i]['flatchain'] = \
+                    labels_scaler.inverse_transform(
+                        results_mcmc[i]['flatchain'])
 
         return X_predl, X_predm, X_predu, results_mcmc
 
