@@ -193,8 +193,13 @@ def binning_pixels(wave, flux, ivar, n_pixel):
         this_ivar_array = ivar[i_pix * n_pixel:(i_pix + 1) * n_pixel]
         if np.all((this_ivar_array > 0.) * np.isfinite(this_ivar_array)):
             # all pixels are good
-            # ivar1 + ivar2 + ... + n)
-            binned_ivar[i_pix] = 1. / np.sum(1. / this_ivar_array)
+            # ################## binning method #################### #
+            # (err1**2 + err2**2 + ... + errn**2) / n**2 = errbin**2 #
+            # 1/ivar1 + 1/ivar2 + ... + 1/ivarn = n**2 /ivar         #
+            # --> binning n pixels with the same error               #
+            # --> improves SNR by a factor of sqrt(n)                #
+            # ###################################################### #
+            binned_ivar[i_pix] = n_pixel ** 2. / np.sum(1. / this_ivar_array)
         else:
             # bad pixel exists
             binned_ivar[i_pix] = 0.
