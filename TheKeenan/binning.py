@@ -152,7 +152,7 @@ def add_randn_noise(flux, snr):
     return flux * (1. + nsr)
 
 
-def binning_pixels(wave, flux, ivar, n_pixel):
+def binning_pixels(wave, flux, ivar=None, n_pixel=3):
     """
 
     Parameters
@@ -176,6 +176,12 @@ def binning_pixels(wave, flux, ivar, n_pixel):
         binned ivar array
 
     """
+    assert n_pixel > 0
+
+    # default ivar
+    if ivar is None:
+        ivar = np.ones_like(flux)
+
     # determine the number of binned pixels
     n_binned = np.fix(len(flux) / n_pixel)
 
