@@ -799,7 +799,9 @@ class Keenan(object):
 
         return X_predl, X_predm, X_predu, results_mcmc
 
-    def predict_spectra(self, X_pred, scaler=True, n_jobs=1, verbose=False):
+    def predict_spectra(self, X_pred,
+                        flux_scaler=True, labels_scaler=True,
+                        n_jobs=1, verbose=False):
         """ predict spectra using trained SVRs
 
         Parameters
@@ -816,7 +818,7 @@ class Keenan(object):
         if X_pred.ndim == 1:
             X_pred = X_pred.reshape(1, -1)
 
-        if scaler:
+        if labels_scaler:
             X_pred = self.tr_labels_scaler.transform(X_pred)
 
         n_pred = X_pred.shape[0]
@@ -824,8 +826,14 @@ class Keenan(object):
             delayed(predict_spectrum)(self.svrs, X_pred[i])
             for i in range(n_pred)
         )
+        flux_pred = np.array(flux_pred)
 
-        return np.array(flux_pred)
+        if flux_scaler:
+            self.tr_flux_scaler.inverse_transform(
+                flux_pred.reshape(flux_pred.shape[0], flux_pred.shape[2])
+            )
+
+        return flux_pred
 
     # ####################### #
     #     daignostics         #
@@ -857,7 +865,7 @@ class Keenan(object):
     #     utils               #
     # ####################### #
 
-    def set_mask(self, mask_init, set_range, set_val):
+    def create_mask(self, mask_init, set_range, set_val):
         """ set pixels in wave_ranges to value
         """
         # vectorize mask_init
