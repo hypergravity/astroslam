@@ -33,7 +33,6 @@ from .predict import predict_pixel_for_diagnostic
 __all__ = ['compare_labels', 'compare_spectra']
 
 
-# TODO: compare tr_labels and test_labels / any two sets of labels
 def compare_labels(label1, label2, labelname1='Label1', labelname2='Label2',
                    figsize=None, figpath=None, ):
     """ compare two sets of labels
@@ -60,7 +59,7 @@ def compare_labels(label1, label2, labelname1='Label1', labelname2='Label2',
 
     # default figsize
     if figsize is None:
-        figsize = (3. * n_dim, 6)
+        figsize = (3.2 * n_dim, 6)
 
     # draw figure
     fig = plt.figure(figsize=figsize)
@@ -84,7 +83,7 @@ def compare_labels(label1, label2, labelname1='Label1', labelname2='Label2',
         ax.plot(xlim, [0., 0.], 'k--')
         ax.set_xlim(xlim)
         ax.set_xlabel('%s : %s' % (labelname1, i))
-        ax.set_ylabel('%s : %s - %s : %s' % (labelname1, i, labelname2, i))
+        ax.set_ylabel('%s : %s - %s : %s' % (labelname2, i, labelname1, i))
 
     fig.tight_layout()
 
