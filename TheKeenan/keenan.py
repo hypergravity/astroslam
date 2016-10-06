@@ -111,6 +111,7 @@ class Keenan(object):
         # if scale: do standardization
         if scale:
             # assign attributes
+            self.wave = wave
             self.tr_flux = tr_flux
             self.tr_ivar = tr_ivar
             self.tr_labels = tr_labels
@@ -129,6 +130,12 @@ class Keenan(object):
         # if not scale, assume the input data is already scaled
         else:
             # assign attributes
+            self.wave = wave
+            self.tr_flux = tr_flux
+            self.tr_ivar = tr_ivar
+            self.tr_labels = tr_labels
+
+            # without standardization
             self.tr_flux_scaled = tr_flux
             self.tr_ivar_scaled = tr_ivar
             self.tr_labels_scaled = tr_labels
