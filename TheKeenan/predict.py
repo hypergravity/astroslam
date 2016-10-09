@@ -213,7 +213,7 @@ def predict_labels_chi2(tplt_flux, tplt_labels, test_flux, test_ivar,
         assert tplt_flux.shape[1] == test_flux.shape[0]
 
         i_min = np.argsort(
-            np.sum(np.sqrt(tplt_flux - test_flux) * test_ivar, axis=1)
+            np.sum((tplt_flux - test_flux) ** 2. * test_ivar, axis=1)
         ).flatten()[0]
 
         return tplt_labels[i_min, :]
