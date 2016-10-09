@@ -34,7 +34,7 @@ from joblib import load, dump, Parallel, delayed
 from .hyperparameter import summarize_hyperparameters_to_table, summarize_table
 from .predict import predict_labels, predict_labels_chi2, predict_spectrum
 from .standardization import standardize, standardize_ivar
-from .train import train_multi_pixels
+from .train import train_multi_pixels, train_single_pixel
 from .mcmc import predict_label_mcmc
 from .diagnostic import compare_labels, single_pixel_diagnostic
 
@@ -329,6 +329,32 @@ class Keenan(object):
     # ####################### #
     #     training            #
     # ####################### #
+    # TODO: train_single_pixel
+    def train_single_pixel(self, i_train, sample_weight=None, cv=10, **kwargs):
+        """ train single pixel
+
+        Parameters
+        ----------
+        i_train: int
+            the pixel that will be trained
+        sample_weight: ndarray
+            weight of each pixel
+        cv: int
+            cv-fold cross-validation
+
+        Returns
+        -------
+        svr, score
+
+        """
+        svr, score = train_single_pixel(
+            self.tr_labels_scaled,
+            self.tr_flux_scaled[:, i_train].reshape(-1, 1),
+            sample_weight=sample_weight.reshape(-1, 1),
+            cv=cv,
+            **kwargs)
+
+        return svr, score
 
     def train_pixels(self, sample_weight_scheme='bool',
                      cv=10, n_jobs=10, method='simple', verbose=10,
