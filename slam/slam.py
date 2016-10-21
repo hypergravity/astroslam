@@ -38,11 +38,11 @@ from .train import train_multi_pixels, train_single_pixel
 from .mcmc import predict_label_mcmc
 from .diagnostic import compare_labels, single_pixel_diagnostic
 
-__all__ = ['Keenan']
+__all__ = ['Slam']
 
 
-class Keenan(object):
-    """ This defines Keenan class """
+class Slam(object):
+    """ This defines Slam class """
     # training data
     wave = np.zeros((0, 0))
     tr_flux = np.zeros((0, 0))
@@ -142,6 +142,49 @@ class Keenan(object):
 
             # update dimensions
             self.__update_dims__()
+
+    @staticmethod
+    def init_from_keenan(k):
+        """ initiate a Slam instance from TheKeenan instance
+        To guarantee it works, you need to install TheKeenan package,
+        especially in the case that Keenan instance is load from dump file.
+
+        Parameters
+        ----------
+        k: string
+            the path of the dump file
+
+        Returns
+        -------
+        a Slam instance
+
+        Examples
+        --------
+        >>> from joblib import load
+        >>> from slam.slam import Slam
+        >>> dump_path = './keenan.dump'
+        >>> k = load(dump_path)
+        >>> s = Slam.init_from_keenan(k)
+
+        """
+
+        # initiate Slam
+        s = Slam(k.wave, k.tr_flux, k.tr_ivar, k.tr_labels)
+
+        # get the __dict__ attribute
+        k_keys = k.__dict__.keys()
+
+        # delete used keys
+        keys_to_be_del = ['wave', 'tr_flux', 'tr_ivar', 'tr_labels']
+        for key in keys_to_be_del:
+            k_keys.remove(key)
+
+        # copy other keys
+        for key in k_keys:
+            s.__setattr__(key, k.__getattribute__(key))
+
+        # return Slam instance
+        return s
 
     # ####################### #
     #     update info         #
@@ -311,17 +354,17 @@ class Keenan(object):
 
         Example
         -------
-        >>> k = Keenan.load_dump_svrs('./keenan_svrs.dump')
+        >>> k = Slam.load_dump_svrs('./keenan_svrs.dump')
         >>> print(k)
 
         """
         wave, svrs = load(filepath)
         n_pix = len(wave)
-        k = Keenan(wave,
-                   np.zeros((10, n_pix)),
-                   np.zeros((10, n_pix)),
-                   np.zeros((10, n_pix)),
-                   scale=False)
+        k = Slam(wave,
+                 np.zeros((10, n_pix)),
+                 np.zeros((10, n_pix)),
+                 np.zeros((10, n_pix)),
+                 scale=False)
         k.svrs = svrs
         k.trained = True
         return k
@@ -956,7 +999,7 @@ def _test_repr():
     tr_flux = np.random.randn(10, 1000)
     tr_ivar = np.random.randn(10, 1000)
     tr_labels = np.random.randn(10, 3)
-    k = Keenan(wave, tr_flux, tr_ivar, tr_labels)
+    k = Slam(wave, tr_flux, tr_ivar, tr_labels)
     print(k)
 
 
