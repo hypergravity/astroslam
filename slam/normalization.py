@@ -31,7 +31,8 @@ from .extern.interpolate import SmoothSpline
 
 
 def normalize_spectrum(wave, flux, norm_range, dwave,
-                       p=(1E-6, 1E-6), q=0.5, ivar=None, eps=1e-10):
+                       p=(1E-6, 1E-6), q=0.5, ivar=None, eps=1e-10,
+                       rsv_frac=1.):
     """ A double smooth normalization of a spectrum
 
     Converted from Chao Liu's normSpectrum.m
@@ -53,6 +54,12 @@ def normalize_spectrum(wave, flux, norm_range, dwave,
         1 -> cubic spline interpolant
     q: float in range of [0, 100]
         percentile, between 0 and 1
+    ivar: ndarray (n_pix, ) | None
+        ivar array, default is None
+    eps: float
+        the ivar threshold
+    rsv_frac: float
+        the fraction of pixels reserved in terms of std. default is 3.
 
     Returns
     -------
@@ -64,7 +71,8 @@ def normalize_spectrum(wave, flux, norm_range, dwave,
     Example
     -------
     >>> flux_norm, flux_cont = normalize_spectrum(
-    >>>     wave, flux, (4000., 8000.), 100., p=(1E-8, 1E-7), q=0.5)
+    >>>     wave, flux, (4000., 8000.), 100., p=(1E-8, 1E-7), q=0.5,
+    >>>     rsv_frac=2.0)
 
     """
     if ivar is not None:
@@ -72,7 +80,7 @@ def normalize_spectrum(wave, flux, norm_range, dwave,
         ivar = np.where(np.logical_or(wave < norm_range[0],
                                       wave > norm_range[1]), 0, ivar)
         ivar = np.where(ivar <= eps, eps, ivar)
-        mask = ivar <= eps
+        # mask = ivar <= eps
         var = 1. / ivar
     else:
         # default config is even weight
@@ -103,9 +111,10 @@ def normalize_spectrum(wave, flux, norm_range, dwave,
             bin_median = np.median(dflux[ind_bin])
             bin_std = np.median(np.abs(dflux - bin_median))
             # within 1 sigma with q-percentile
-            ind_good = np.logical_or(ind_good, (np.abs(
-                dflux - np.percentile(dflux[ind_bin], q * 100.)) < (
-                                                    1. * bin_std)) * ind_bin)
+            ind_good_ = ind_bin * (
+                np.abs(dflux - np.percentile(dflux[ind_bin], q * 100.)) < (
+                rsv_frac * bin_std))
+            ind_good = np.logical_or(ind_good, ind_good_)
 
     # assert there is continuum pixels
     try:
@@ -126,7 +135,7 @@ def normalize_spectrum(wave, flux, norm_range, dwave,
 
 def normalize_spectra_block(wave, flux_block, norm_range, dwave,
                             p=(1E-6, 1E-6), q=0.5, ivar_block=None, eps=1e-10,
-                            n_jobs=1, verbose=10):
+                            rsv_frac=3., n_jobs=1, verbose=10):
     """ normalize multiple spectra using the same configuration
     This is specially designed for TheKeenan
 
@@ -146,6 +155,12 @@ def normalize_spectra_block(wave, flux_block, norm_range, dwave,
         1 -> cubic spline interpolant
     q: float in range of [0, 100]
         percentile, between 0 and 1
+    ivar_block: ndarray (n_pix, ) | None
+        ivar array, default is None
+    eps: float
+        the ivar threshold
+    rsv_frac: float
+        the fraction of pixels reserved in terms of std. default is 3.
     n_jobs: int
         number of processes launched by joblib
     verbose: int / bool
@@ -167,7 +182,7 @@ def normalize_spectra_block(wave, flux_block, norm_range, dwave,
     results = Parallel(n_jobs=n_jobs, verbose=verbose)(
         delayed(normalize_spectrum)(
             wave, flux_block[i], norm_range, dwave, p=p, q=q,
-            ivar=ivar_block[i], eps=eps)
+            ivar=ivar_block[i], eps=eps, rsv_frac=rsv_frac)
         for i in range(n_spec))
 
     # unpack results
