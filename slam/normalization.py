@@ -195,6 +195,35 @@ def normalize_spectra_block(wave, flux_block, norm_range, dwave,
     return np.array(flux_norm_block), np.array(flux_cont_block)
 
 
+def get_stable_pixels(pixel_disp, wave_arm=100, frac=0.20):
+    """
+
+    Parameters
+    ----------
+    pixel_disp: np.ndarray
+        dispersion array
+    wave_arm: int
+        the arm length in terms of pixels
+    frac: float
+        the reserved fraction, between 0.00 and 1.00
+
+    Returns
+    -------
+    ind_stable
+
+    """
+    ind_stable = np.zeros_like(pixel_disp, dtype=np.bool)
+
+    for i in range(len(ind_stable)):
+        edge_l = np.max([i - wave_arm, 0])
+        edge_r = np.min([i + wave_arm, len(pixel_disp)])
+        if pixel_disp[i] <= \
+                np.percentile(pixel_disp[edge_l:edge_r], frac * 100.):
+            ind_stable[i] = True
+
+    return ind_stable
+
+
 # TODO: this is a generalized version
 def normalize_spectra(wave_flux_tuple_list, norm_range, dwave,
                       p=(1E-6, 1E-6), q=50, n_jobs=1, verbose=False):
