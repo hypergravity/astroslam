@@ -131,7 +131,7 @@ def interp_nearest(wave, spec, wave_interp, fill_value=np.nan):
     return I(wave_interp)
 
 
-def add_randn_noise(flux, snr):
+def add_noise_normal(flux, snr):
     """ add normal random noise for flux (single spectrum)
 
     Parameters
@@ -147,6 +147,28 @@ def add_randn_noise(flux, snr):
 
     """
     nsr = np.random.randn(*flux.shape) / snr
+    nsr = np.where((nsr < 1.) * (nsr > -1.), nsr, np.zeros_like(flux))
+
+    return flux * (1. + nsr)
+
+
+def add_noise_poisson(flux, k=1.0):
+    """ add Poisson random noise for flux (single spectrum)
+
+    Parameters
+    ----------
+    flux: ndarray
+        flux array
+    k: float
+        k times better Poisson noise, implemented in case Poisson is too noisy
+        default value is 1.
+
+    Returns
+    -------
+    flux: ndarray
+
+    """
+    nsr = np.random.randn(*flux.shape) / np.sqrt(np.abs(flux)) / k
     nsr = np.where((nsr < 1.) * (nsr > -1.), nsr, np.zeros_like(flux))
 
     return flux * (1. + nsr)
