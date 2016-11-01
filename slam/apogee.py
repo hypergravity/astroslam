@@ -26,13 +26,98 @@ Aims
 from __future__ import print_function
 
 import os
-import urllib2
-import numpy as np
-from astropy.table import Table
-from joblib import load, dump, Parallel, delayed
+import urllib
+from collections import OrderedDict
 
+import numpy as np
+from astropy.io import fits
+from astropy.table import Table, Column
 
 __all__ = ['apStar_url', 'apStar_download', 'mkdir_loop']
+
+
+def reconstruct_wcs_coord_from_fits_header(hdr, dim=1):
+    """ reconstruct wcs coordinates (e.g., wavelength array) """
+    # assert dim is not larger than limit
+    assert dim <= hdr['NAXIS']
+
+    # get keywords
+    crval = hdr['CRVAL%d' % dim]
+    cdelt = hdr['CDELT%d' % dim]
+    try:
+        crpix = hdr['CRPIX%d' % dim]
+    except KeyError:
+        crpix = 1
+
+    # length of the current dimension
+    naxis_ = hdr['NAXIS%d' % dim]
+
+    # reconstruct wcs coordinates
+    coord = np.arange(1 - crpix, naxis_ + 1 - crpix) * cdelt + crval
+    return coord
+
+
+def apStar_read(fp, verbose=False):
+    """ read apStar fits file
+
+    Parameters
+    ----------
+    fp: string
+        file path
+
+    Returns
+    -------
+    spec (astropy.table.Table instance)
+
+    Notes
+    -----
+    The url of the doc for apStar files:
+    https://data.sdss.org/datamodel/files/APOGEE_REDUX/APRED_VERS/APSTAR_VERS/
+    TELESCOPE/LOCATION_ID/apStar.html
+
+    HDU0: master header with target information
+    HDU1: spectra: combined and individual
+    HDU2: error spectra
+    HDU3: mask spectra
+    HDU4: sky spectra
+    HDU5: sky error spectra
+    HDU6: telluric spectra
+    HDU7: telluric error spectra
+    HDU8: table with LSF coefficients
+    HDU9: table with RV/binary information
+
+    """
+    hl = fits.open(fp)
+
+    # construct columns
+    wave = Column(10. ** reconstruct_wcs_coord_from_fits_header(hl[1].header, 1), 'wave')
+    flux = Column(hl[1].data.T, 'flux')
+    flux_err = Column(hl[2].data.T, 'flux_err')
+    mask = Column(hl[3].data.T, 'mask')
+    sky = Column(hl[4].data.T, 'sky')
+    sky_err = Column(hl[5].data.T, 'sky_err')
+    telluric = Column(hl[6].data.T, 'telluric')
+    telluric_err = Column(hl[7].data.T, 'telluric_err')
+
+    # construct Table instance
+    spec = Table([wave, flux, flux_err, mask,
+                  sky, sky_err, telluric, telluric_err])
+
+    # meta data
+    spec.meta = OrderedDict(hl[0].header)
+
+    if verbose:
+        print("@Cham: successfully load %s ..." % fp)
+    return spec
+
+
+def test_apStar_read():
+    fp = '/pool/sdss/apogee_dr13/apStar-r6-VESTA.fits'
+    spec = apStar_read(fp, True)
+    spec.pprint()
+    print(spec.meta)
+    return spec
+    # spec = test_apStar_read()
 
 
 def apStar_url(telescope, location_id, field, file_,
@@ -106,7 +191,7 @@ def apStar_download(url, file_path, verbose=True):
     """
     status = True
     try:
-        response = urllib2.urlopen(url)
+        response = urllib.urlopen(url)
         f = open(file_path, 'w+')
         f.write(response.read())
         f.close()
