@@ -98,7 +98,15 @@ def normalize_spectrum(wave, flux, norm_range, dwave,
 
     # SMOOTH 1
     # print(wave.shape, flux.shape, var.shape)
-    flux_smoothed1 = SmoothSpline(wave, flux, p=p[0], var=var)(wave)
+    if ivar is not None:
+        ind_good_init = 1. * (ivar > 0.) * (flux > 0.)
+    else:
+        ind_good_init = 1. * (flux > 0.)
+    ind_good_init = ind_good_init.astype(np.bool)
+    # print("@Cham: sum(ind_good_init)", np.sum(ind_good_init))
+
+    flux_smoothed1 = SmoothSpline(wave[ind_good_init], flux[ind_good_init],
+                                  p=p[0], var=var[ind_good_init])(wave)
     dflux = flux - flux_smoothed1
 
     # collecting continuum pixels --> ITERATION 1
@@ -112,10 +120,11 @@ def normalize_spectrum(wave, flux, norm_range, dwave,
             bin_std = np.median(np.abs(dflux - bin_median))
             # within 1 sigma with q-percentile
             ind_good_ = ind_bin * (
-                np.abs(dflux - np.percentile(dflux[ind_bin], q * 100.)) < (
+                np.abs(dflux - np.nanpercentile(dflux[ind_bin], q * 100.)) < (
                 rsv_frac * bin_std))
             ind_good = np.logical_or(ind_good, ind_good_)
 
+    ind_good = np.logical_and(ind_good, ind_good_init)
     # assert there is continuum pixels
     try:
         assert np.sum(ind_good) > 0
@@ -272,8 +281,10 @@ def test_normaliza_spectra_block():
     test_flux = tr_flux
     test_ivar = tr_ivar
 
-    r = normalize_spectra_block(wl, tr_flux, (15200., 16900.), 30., q=0.5,
-                                ivar_block=tr_ivar, n_jobs=10, verbose=10)
+    r = normalize_spectra_block(wl, tr_flux, (15200., 16900.), 30., q=0.9,
+                                rsv_frac=0.5,
+                                p=(1E-10, 1E-10), ivar_block=tr_ivar,
+                                n_jobs=10, verbose=10)
 
     flux_norm, flux_cont = r
     flux_norm = np.array(flux_norm)
@@ -288,7 +299,7 @@ def test_normaliza_spectra_block():
         ax.plot(wl, flux_cont[i] + ofst, 'r')
     fig.tight_layout()
     fig.savefig(
-        '/pool/projects/TheKeenan/data/TheCannonData/test_norm_spec.pdf')
+        '/pool/projects/TheKeenan/data/TheCannonData/test_norm_spec_1.pdf')
 
 
 if __name__ == '__main__':
