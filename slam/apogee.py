@@ -57,13 +57,24 @@ def reconstruct_wcs_coord_from_fits_header(hdr, dim=1):
     return coord
 
 
-def apStar_read(fp, verbose=False):
+def apStar_read(fp, full=False, meta=False, verbose=False, wave_interp=None):
     """ read apStar fits file
 
     Parameters
     ----------
     fp: string
         file path
+    full: bool
+        if False, return a simple version of apStar spec.
+        if True, return a full version of apStar spec.
+    meta: bool
+        if True, attach Primary HDU header as spec.meta (OrderedDict)
+    verbose: bool:
+        if True, verbose.
+    wave_interp: None | ndarray
+        if None, ignore it.
+        if ndarray, spec is interpolated to wave_interp
+        So far not implemented!
 
     Returns
     -------
@@ -87,24 +98,36 @@ def apStar_read(fp, verbose=False):
     HDU9: table with RV/binary information
 
     """
+    # read apStar file
     hl = fits.open(fp)
 
-    # construct columns
-    wave = Column(10. ** reconstruct_wcs_coord_from_fits_header(hl[1].header, 1), 'wave')
-    flux = Column(hl[1].data.T, 'flux')
-    flux_err = Column(hl[2].data.T, 'flux_err')
-    mask = Column(hl[3].data.T, 'mask')
-    sky = Column(hl[4].data.T, 'sky')
-    sky_err = Column(hl[5].data.T, 'sky_err')
-    telluric = Column(hl[6].data.T, 'telluric')
-    telluric_err = Column(hl[7].data.T, 'telluric_err')
-
     # construct Table instance
-    spec = Table([wave, flux, flux_err, mask,
-                  sky, sky_err, telluric, telluric_err])
+    if not full:
+        # not full apStar info, [wave, flux, flux_err, mask] only
+        spec = Table([
+            Column(
+                10. ** reconstruct_wcs_coord_from_fits_header(hl[1].header, 1),
+                'wave'),
+            Column(hl[1].data.T, 'flux'),
+            Column(hl[2].data.T, 'flux_err'),
+            Column(hl[3].data.T, 'mask')])
+    else:
+        # full apStar info
+        spec = Table([
+            Column(
+                10. ** reconstruct_wcs_coord_from_fits_header(hl[1].header, 1),
+                'wave'),
+            Column(hl[1].data.T, 'flux'),
+            Column(hl[2].data.T, 'flux_err'),
+            Column(hl[3].data.T, 'mask'),
+            Column(hl[4].data.T, 'sky'),
+            Column(hl[5].data.T, 'sky_err'),
+            Column(hl[6].data.T, 'telluric'),
+            Column(hl[7].data.T, 'telluric_err')])
 
     # meta data
-    spec.meta = OrderedDict(hl[0].header)
+    if meta:
+        spec.meta = OrderedDict(hl[0].header)
 
     if verbose:
         print("@Cham: successfully load %s ..." % fp)
@@ -121,7 +144,7 @@ def test_apStar_read():
 
 
 def apStar_url(telescope, location_id, field, file_,
-               version='r6', url_header=None):
+               url_header=None):
     """ apStar url generator
     which in principle is able to generate file path
 
@@ -137,8 +160,6 @@ def apStar_url(telescope, location_id, field, file_,
         for 'apo25m', it's non-sense
     file_: string
         FILE
-    version: string
-        currently it's 'r6' @20161031
     url_header: string
         if None|'sas', it's set to be
         "https://data.sdss.org/sas/dr13/apogee/spectro/redux/%s/stars"%version
@@ -148,11 +169,15 @@ def apStar_url(telescope, location_id, field, file_,
     url: string
         the url of apStar file
 
+    Note
+    ----
+    version: string
+        currently it's 'r6' @20161031
     """
 
     if url_header is None or url_header is 'sas':
-        url_header = ("https://data.sdss.org/sas/"
-                      "dr13/apogee/spectro/redux/%s/stars") % version
+        url_header = ("https://data.sdss.org/sas/dr13/apogee"
+                      "/spectro/redux/r6/stars")
 
     url_header = url_header.strip()
     telescope = telescope.strip()
@@ -167,6 +192,48 @@ def apStar_url(telescope, location_id, field, file_,
         url = "%s/%s/%s/%s" % (url_header, telescope, location_id, file_)
     else:
         raise(ValueError("@Cham: This is not an option!"))
+    return url
+
+
+def aspcapStar_url(location_id, file_, url_header=None):
+
+    """ aspcapStar url generator
+    which in principle is able to generate file path
+
+    Parameters
+    ----------
+    location_id: int
+        for 'apo1m', it's 1
+        for 'apo25m', it's like PLATE
+    file_: string
+        FILE
+    url_header: string
+        if None|'sas', it's set to be
+        "https://data.sdss.org/sas/dr13/apogee/spectro/redux/%s/stars/l30e/l30e.2"%version
+
+    Returns
+    -------
+    url: string
+    the url of apStar file
+
+    Note
+    ----
+    version: string
+        currently it's 'r6' @20161031
+    """
+
+    if url_header is None or url_header is 'sas':
+        url_header = ("https://data.sdss.org/sas/dr13/apogee"
+                      "/spectro/redux/r6/stars/l30e/l30e.2")
+
+    url_header = url_header.strip()
+    file_ = file_.strip()
+
+    try:
+        url = "%s/%s/%s/%s" % (url_header, location_id, file_)
+    except:
+        raise (ValueError("@Cham: This is not an option!"))
+
     return url
 
 
