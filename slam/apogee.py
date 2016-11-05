@@ -57,7 +57,7 @@ def reconstruct_wcs_coord_from_fits_header(hdr, dim=1):
     return coord
 
 
-def apStar_read(fp, full=False, meta=False, verbose=False, wave_interp=None):
+def apStar_read(fp, full=False, meta=False, verbose=False):
     """ read apStar fits file
 
     Parameters
@@ -71,10 +71,6 @@ def apStar_read(fp, full=False, meta=False, verbose=False, wave_interp=None):
         if True, attach Primary HDU header as spec.meta (OrderedDict)
     verbose: bool:
         if True, verbose.
-    wave_interp: None | ndarray
-        if None, ignore it.
-        if ndarray, spec is interpolated to wave_interp
-        So far not implemented!
 
     Returns
     -------
@@ -132,6 +128,65 @@ def apStar_read(fp, full=False, meta=False, verbose=False, wave_interp=None):
     if verbose:
         print("@Cham: successfully load %s ..." % fp)
     return spec
+
+
+def aspcapStar_read(fp, meta=False, verbose=False):
+    """ read apStar fits file
+
+    Parameters
+    ----------
+    fp: string
+        file path
+    meta: bool
+        if True, attach Primary HDU header as spec.meta (OrderedDict)
+    verbose: bool:
+        if True, verbose.
+
+    Returns
+    -------
+    spec (astropy.table.Table instance)
+
+    Notes
+    -----
+    The url of the doc for aspcapStar files:
+    https://data.sdss.org/datamodel/files/APOGEE_REDUX/APRED_VERS/APSTAR_VERS/
+    ASPCAP_VERS/RESULTS_VERS/LOCATION_ID/aspcapStar.html
+
+    HDU0: The Primary Header
+    HDU1: Spectrum array
+    HDU2: Error array
+    HDU3: Best fit spectrum
+    HDU4: ASPCAP data table
+
+    """
+    # read apStar file
+    hl = fits.open(fp)
+
+    # construct Table instance
+    spec = Table([
+        Column(
+            10. ** reconstruct_wcs_coord_from_fits_header(hl[1].header, 1),
+            'wave'),
+        Column(hl[1].data, 'flux'),
+        Column(hl[2].data, 'flux_err'),
+        Column(hl[3].data, 'flux_fit')])
+
+    # meta data
+    if meta:
+        spec.meta = OrderedDict(hl[0].header)
+
+    if verbose:
+        print("@Cham: successfully load %s ..." % fp)
+    return spec
+
+
+def test_aspcapStar_read():
+    fp = '/pool/sdss/apogee_dr13/aspcapStar-r6-l30e.2-2M07332578+2044059.fits'
+    spec = aspcapStar_read(fp, True)
+    spec.pprint()
+    print(spec.meta)
+    return spec
+    # spec = test_aspcapStar_read()
 
 
 def test_apStar_read():
