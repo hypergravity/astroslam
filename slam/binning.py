@@ -152,8 +152,8 @@ def add_noise_normal(flux, snr):
     return flux * (1. + nsr)
 
 
-def add_noise_poisson(flux, k=1.0):
-    """ add Poisson random noise for flux (single spectrum)
+def add_noise_gpoisson(flux, k=1.0):
+    """ add SCALED Poisson random noise for flux (single spectrum)
 
     Parameters
     ----------
@@ -172,6 +172,22 @@ def add_noise_poisson(flux, k=1.0):
     nsr = np.where((nsr < 1.) * (nsr > -1.), nsr, np.zeros_like(flux))
 
     return flux * (1. + nsr)
+
+
+def add_noise_poisson(flux):
+    """ add Poisson random noise for flux (single/multi spectrum)
+
+    Parameters
+    ----------
+    flux: ndarray
+        flux array
+
+    Returns
+    -------
+    flux: ndarray
+
+    """
+    return np.random.poisson(flux)
 
 
 def binning_pixels(wave, flux, ivar=None, n_pixel=3):
