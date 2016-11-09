@@ -190,6 +190,52 @@ def add_noise_poisson(flux):
     return np.random.poisson(flux)
 
 
+def measure_poisson_snr(flux):
+    """ measure SNR according to Poisson noise
+
+    Parameters
+    ----------
+    flux: ndarray 2D
+        flux
+
+    Returns
+    -------
+    snr_med
+
+    """
+    # Poisson SNR
+    snr = np.sqrt(flux)
+    # median Poisson SNR
+    snr_med = np.median(snr, axis=1)
+    return snr_med
+
+
+def degrade_snr_to(flux, snr):
+    """ degrade SNR to snr for flux
+
+    Parameters
+    ----------
+    flux: ndarray 2D
+        flux
+    snr: float
+        target snr
+
+    Returns
+    -------
+    flux_ : ndarray 2D
+        flux with median SNR = snr
+
+    """
+    # measure poisson SNR for flux
+    snr_med = measure_poisson_snr(flux)
+    # determine scale
+    scale_ = (snr_med.reshape(-1, 1)/snr) ** 2.
+    # scale flux
+    flux_ = flux / scale_
+
+    return flux_
+
+
 def binning_pixels(wave, flux, ivar=None, n_pixel=3):
     """
 
