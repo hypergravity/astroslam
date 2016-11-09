@@ -285,14 +285,14 @@ def aspcapStar_url(location_id, file_, url_header=None):
     file_ = file_.strip()
 
     try:
-        url = "%s/%s/%s/%s" % (url_header, location_id, file_)
+        url = "%s/%s/%s" % (url_header, location_id, file_)
     except:
         raise (ValueError("@Cham: This is not an option!"))
 
     return url
 
 
-def apStar_download(url, file_path, verbose=True):
+def apStar_download(url, file_path, verbose=False):
     """ apStar file downloading utils
     which in principle is able to download everything from a valid url
 
