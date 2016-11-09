@@ -124,6 +124,20 @@ class Slam(object):
             self.tr_labels_scaler, self.tr_labels_scaled = \
                 standardize(tr_labels)
 
+            # TODO: what if there are bad pixels in tr_flux?
+            for i in range(self.tr_flux.shape[1]):
+                ind_use = self.tr_ivar[:, i] > 0
+                if np.sum(ind_use) > 0:
+                    self.tr_flux_scaler.mean_[i] = np.nanmean(
+                        self.tr_flux[ind_use, i])
+                    self.tr_flux_scaler.scale_[i] = np.nanstd(
+                        self.tr_flux[ind_use, i])
+                    self.tr_flux_scaler.var_[i] = np.nanvar(
+                        self.tr_flux[ind_use, i])
+            self.tr_flux_scaler.scale_[
+                np.where(self.tr_flux_scaler.scale_ == 0.)] = 1.
+            self.tr_flux_scaled = self.tr_flux_scaler.transform(self.tr_flux)
+
             # update dimensions
             self.__update_dims__()
 
