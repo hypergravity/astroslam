@@ -239,16 +239,14 @@ def shift_poisson_snr(flux, snr):
     # measure poisson SNR for flux
     snr_med = measure_poisson_snr(flux)
     # determine scale
-    scale_ = (snr_med.reshape(-1, 1)/snr) ** 2.
+    scale_ = (snr_med/snr) ** 2.
     # scale flux
     flux_ = flux / scale_
-    # generate Poisson random numbers
-    flux__ = np.random.poisson(flux_)
 
     if flux.ndim == 1:
-        flux__ = flux.reshape(1, -1)
+        flux_ = flux_.flatten()
 
-    return flux__
+    return flux_
 
 
 def binning_pixels(wave, flux, ivar=None, n_pixel=3):
