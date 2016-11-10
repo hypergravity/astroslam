@@ -191,7 +191,7 @@ def add_noise_poisson(flux):
 
 
 def measure_poisson_snr(flux):
-    """ measure SNR according to Poisson noise
+    """ measure Poisson SNR  for flux
 
     Parameters
     ----------
@@ -200,40 +200,55 @@ def measure_poisson_snr(flux):
 
     Returns
     -------
-    snr_med
+    snr_med: ndarray
+        the median Poisson SNR of flux
 
     """
     # Poisson SNR
     snr = np.sqrt(flux)
     # median Poisson SNR
     snr_med = np.median(snr, axis=1)
+
     return snr_med
 
 
-def degrade_snr_to(flux, snr):
-    """ degrade SNR to snr for flux
+def shift_poisson_snr(flux, snr):
+    """ shift Poisson SNR for flux
 
     Parameters
     ----------
-    flux: ndarray 2D
+    flux: ndarray 1D/2D
         flux
     snr: float
         target snr
 
     Returns
     -------
-    flux_ : ndarray 2D
+    flux__ : ndarray 2D
         flux with median SNR = snr
 
     """
+
+    if flux.ndim == 1:
+        # 1d flux
+        flux = flux.reshape(1, -1)
+    elif flux.ndim > 2:
+        # >2d
+        raise(ValueError('The number of dimensions of input flux is larger than 2!'))
+
     # measure poisson SNR for flux
     snr_med = measure_poisson_snr(flux)
     # determine scale
     scale_ = (snr_med.reshape(-1, 1)/snr) ** 2.
     # scale flux
     flux_ = flux / scale_
+    # generate Poisson random numbers
+    flux__ = np.random.poisson(flux_)
 
-    return flux_
+    if flux.ndim == 1:
+        flux__ = flux.reshape(1, -1)
+
+    return flux__
 
 
 def binning_pixels(wave, flux, ivar=None, n_pixel=3):
