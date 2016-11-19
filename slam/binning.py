@@ -237,7 +237,7 @@ def shift_poisson_snr(flux, snr):
         raise(ValueError('The number of dimensions of input flux is larger than 2!'))
 
     # measure poisson SNR for flux
-    snr_med = measure_poisson_snr(flux)
+    snr_med = measure_poisson_snr(flux)[:, None]
     # determine scale
     scale_ = (snr_med/snr) ** 2.
     # scale flux
