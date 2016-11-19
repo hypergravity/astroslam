@@ -84,7 +84,7 @@ def normalize_spectrum(wave, flux, norm_range, dwave,
         var = 1. / ivar
     else:
         # default config is even weight
-        var = 1
+        var = np.ones_like(flux)
 
     # wave = wave[~mask]
     # flux = flux[~mask]
