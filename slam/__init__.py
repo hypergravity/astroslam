@@ -1,3 +1,2 @@
-# from .standardization import standardize
 
-# __all__ = ['standardization', 'config']
+__version__ = '0.7.5'
