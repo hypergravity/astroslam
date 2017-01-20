@@ -19,7 +19,7 @@ Modifications
 
 Aims
 ----
-- Keenan class
+- Slam class
 
 """
 
@@ -73,7 +73,7 @@ class Slam(object):
     # ####################### #
 
     def __init__(self, wave, tr_flux, tr_ivar, tr_labels, scale=True):
-        """ initialize the Keenan instance with tr_flux, tr_ivar, tr_labels
+        """ initialize the Slam instance with tr_flux, tr_ivar, tr_labels
 
         Parameters
         ----------
@@ -88,7 +88,7 @@ class Slam(object):
 
         Returns
         -------
-        Keenan instance
+        Slam instance
 
         """
 
@@ -106,7 +106,7 @@ class Slam(object):
 
         except:
             raise (ValueError(
-                "@Keenan: input data error, go back and check your data!"))
+                "@SLAM: input data error, go back and check your data!"))
 
         # if scale: do standardization
         if scale:
@@ -214,7 +214,7 @@ class Slam(object):
         # verbose
         if verbose:
             print("")
-            print("@Keenan: updating data dimensions!")
+            print("@SLAM: updating data dimensions!")
             print("----------------------------------")
             print("n_obs: %s --> %s" % (n_obs_old, self.n_obs))
             print("n_pix: %s --> %s" % (n_pix_old, self.n_pix))
@@ -233,7 +233,7 @@ class Slam(object):
 
     def __repr__(self):
         repr_strs = [
-            "Keenan instance:",
+            "Slam instance:",
             "tr_flux............: ( %s x %s )" % self.tr_flux.shape,
             "tr_ivar............: ( %s x %s )" % self.tr_ivar.shape,
             "tr_labels..........: ( %s x %s )" % self.tr_labels.shape,
@@ -279,7 +279,7 @@ class Slam(object):
     # ####################### #
 
     def save_dump(self, filepath, overwrite=False, *args, **kwargs):
-        """ save Keenan object to dump file using joblib
+        """ save Slam object to dump file using joblib
 
         Parameters
         ----------
@@ -294,7 +294,7 @@ class Slam(object):
         """
         # check file existence
         if os.path.exists(filepath) and not overwrite:
-            raise (IOError("@Keenan: file exists! [%s]" % filepath))
+            raise (IOError("@Slam: file exists! [%s]" % filepath))
         else:
             # the joblib.dump() will overwrite file in default
             dump(self, filepath, *args, **kwargs)
@@ -302,7 +302,7 @@ class Slam(object):
 
     @classmethod
     def load_dump(cls, filepath):
-        """ load Keenan instance from dump file
+        """ load Slam instance from dump file
 
         Parameters
         ----------
@@ -311,18 +311,18 @@ class Slam(object):
 
         Returns
         -------
-        Keenan instance / arbitrary python object
+        Slam instance / arbitrary python object
 
         Example
         -------
-        >>> k = Keenan.load_dump('./keenan.dump')
+        >>> k = Slam.load_dump('./slam.dump')
 
         """
         # check file existence
         try:
             assert os.path.exists(filepath)
         except:
-            raise (IOError("@Keenan: file does not exist! [%s]" % filepath))
+            raise (IOError("@Slam: file does not exist! [%s]" % filepath))
 
         return load(filepath)
 
@@ -341,12 +341,12 @@ class Slam(object):
 
         Example
         -------
-        >>> k.save_dump_svrs('./keenan_svrs.dump')
+        >>> k.save_dump_svrs('./slam_svrs.dump')
 
         """
         # check file existence
         if os.path.exists(filepath) and not overwrite:
-            raise (IOError("@Keenan: file exists! [%s]" % filepath))
+            raise (IOError("@SLAM: file exists! [%s]" % filepath))
         else:
             # the joblib.dump() will overwrite file in default
             dump((self.wave, self.svrs), filepath, *args, **kwargs)
@@ -354,7 +354,7 @@ class Slam(object):
 
     @classmethod
     def load_dump_svrs(cls, filepath):
-        """ [NOT RECOMMENDED] initialize Keenan instance with only *svrs* data
+        """ [NOT RECOMMENDED] initialize Slam instance with only *svrs* data
 
         Parameters
         ----------
@@ -363,12 +363,12 @@ class Slam(object):
 
         Returns
         -------
-        A Keenan instance
+        A Slam instance
         flux, ivar and labels will be automatically filled with np.zeros
 
         Example
         -------
-        >>> k = Slam.load_dump_svrs('./keenan_svrs.dump')
+        >>> k = Slam.load_dump_svrs('./slam_svrs.dump')
         >>> print(k)
 
         """
@@ -889,8 +889,7 @@ class Slam(object):
 
         return X_predl, X_predm, X_predu, results_mcmc
 
-    def predict_spectra(self, X_pred,
-                        flux_scaler=True, labels_scaler=True,
+    def predict_spectra(self, X_pred, labels_scaler=True, flux_scaler=True,
                         n_jobs=1, verbose=False):
         """ predict spectra using trained SVRs
 
@@ -905,9 +904,11 @@ class Slam(object):
             predicted spectra
 
         """
+        # convert 1d label to 2d label
         if X_pred.ndim == 1:
             X_pred = X_pred.reshape(1, -1)
 
+        #
         if labels_scaler:
             X_pred = self.tr_labels_scaler.transform(X_pred)
 
@@ -916,12 +917,10 @@ class Slam(object):
             delayed(predict_spectrum)(self.svrs, X_pred[i])
             for i in range(n_pred)
         )
-        flux_pred = np.array(flux_pred)
+        flux_pred = np.array([_[0] for _ in flux_pred])
 
         if flux_scaler:
-            self.tr_flux_scaler.inverse_transform(
-                flux_pred.reshape(flux_pred.shape[0], flux_pred.shape[2])
-            )
+            self.tr_flux_scaler.inverse_transform(flux_pred)
 
         return flux_pred
 
