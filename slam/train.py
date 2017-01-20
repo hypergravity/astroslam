@@ -69,7 +69,7 @@ def train_single_pixel(X, y, sample_weight=None, cv=10,
         # cross-validation will be performed to calculate MSE
         assert isinstance(cv, int) and cv > 3
         scores = cross_validation.cross_val_score(
-            svr, X, y, scoring='mean_squared_error', cv=cv)
+            svr, X, y, scoring='neg_mean_squared_error', cv=cv)
         score = scores.mean()
 
     # return (svr, score)
@@ -117,7 +117,7 @@ def train_single_pixel_grid(X, y, sample_weight=None, cv=10,
     # perform GridSearchCV
     grid = GridSearchCV(svr, param_grid, cv=cv,
                         fit_params={'sample_weight': sample_weight},
-                        scoring='mean_squared_error', n_jobs=1)
+                        scoring='neg_mean_squared_error', n_jobs=1)
     # fit data
     grid.fit(X, y)
 
@@ -166,7 +166,7 @@ def train_single_pixel_rand(X, y, sample_weight=None, cv=10,
     # perform RandomizedSearchCV
     rand = RandomizedSearchCV(svr, param_dist, n_iter=n_iter, cv=cv,
                               fit_params={'sample_weight': sample_weight},
-                              scoring='mean_squared_error', n_jobs=1)
+                              scoring='neg_mean_squared_error', n_jobs=1)
     # fit data
     rand.fit(X, y)
 
@@ -182,7 +182,7 @@ def svr_mse(hyperparam, X, y, verbose=False):
     svr = svm.SVR(gamma=gamma, C=C, epsilon=epsilon)
     # MSE
     scores = cross_validation.cross_val_score(
-        svr, X, y, scoring='mean_squared_error', cv=10, verbose=False)
+        svr, X, y, scoring='neg_mean_squared_error', cv=10, verbose=False)
     score = -scores.mean()
 
     # verbose
