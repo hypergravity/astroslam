@@ -29,6 +29,7 @@ from joblib import Parallel, delayed
 
 # from .mcmc import lnlike_gaussian
 from .costfunction import chi2_simple_1d
+from scipy.optimize import leastsq
 
 
 def predict_pixel(svr, X_, mask=True):
@@ -140,22 +141,27 @@ def predict_labels(X0, svrs, test_flux, test_ivar=None, mask=None,
     if ivar_scaler is not None:
         test_ivar = ivar_scaler.transform(test_ivar.reshape(1, -1)).flatten()
 
+    # print ("Xshape in predict_labels: ", X0.shape)
+    # print costfun_for_label(X0, svrs, test_flux, test_ivar, mask)
+    X_pred, ier = leastsq(costfun_for_label, X0,
+                          args=(svrs, test_flux, test_ivar, mask), **kwargs)
     # do minimization using Nelder-Mead method [tol=1.e-8 set by user!]
-    X_pred = minimize(costfun_for_label, X0,
-                      args=(svrs, test_flux, test_ivar, mask),
-                      method='Nelder-Mead', **kwargs)
+    # X_pred = minimize(costfun_for_label, X0,
+    #                   args=(svrs, test_flux, test_ivar, mask),
+    #                   method='Nelder-Mead', **kwargs)
     # nll = lambda *args: -lnlike_gaussian(*args)
     # X_pred = minimize(nll, X0,
     #                   args=(svrs, test_flux, test_ivar, mask),
     #                   method='Nelder-Mead', **kwargs)
-    print('@Cham: X_init=', X0, 'X_final=', X_pred['x'], 'nit=', X_pred['nit'])
+    print('@Cham: X_init=', X0, 'X_final=', X_pred, 'ier', ier)
+    # , 'nit=', X_pred['nit']
 
     # scale X_pred back if necessary
     if labels_scaler is not None:
         X_pred = labels_scaler.inverse_transform(
-            X_pred['x'].reshape(1, -1)).flatten()
+            X_pred.reshape(1, -1)).flatten()
     else:
-        X_pred = X_pred['x'].flatten()
+        X_pred = X_pred.flatten()
 
     return X_pred
 
@@ -175,6 +181,8 @@ def costfun_for_label(X_, svrs, test_flux, test_ivar, mask):
         predict the pixels where mask==True
 
     """
+    # print ("X_ in costfun_for_label: ", X_)
+    X_.reshape(1, -1)
     # default is to use all pixels [True->will be used, False->deprecated]
     if mask is None:
         mask = np.ones((len(test_flux),), dtype=np.bool)
@@ -188,11 +196,18 @@ def costfun_for_label(X_, svrs, test_flux, test_ivar, mask):
         # mask = np.logical_and(mask, test_ivar > 0.01 * np.median(test_ivar))
 
     # do prediction
-    pred_flux = predict_spectrum(svrs, X_, mask)
+    pred_flux = predict_spectrum(svrs, X_, mask).astype(np.float)
     # the pred_flux contains nan for mask=False pixels
 
+    # print ("test_flux", test_flux, test_flux.shape)
+    # print ("pred_flux", pred_flux, pred_flux.shape)
+    # print ("test_ivar", test_ivar, test_ivar.shape)
+
     # calculate chi2
-    return chi2_simple_1d(test_flux, pred_flux, ivar=test_ivar)
+    # return chi2_simple_1d(test_flux, pred_flux, ivar=test_ivar)
+    res = (test_flux.flatten()-pred_flux.flatten())*test_ivar.flatten()
+    res[np.isnan(res)] = 0.
+    return res
 
 
 def predict_labels_chi2(tplt_flux, tplt_labels, test_flux, test_ivar,
