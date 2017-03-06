@@ -93,7 +93,7 @@ def normalize_spectrum(wave, flux, norm_range, dwave,
     assert 0. < q < 1.
 
     # n_iter = len(p)
-    n_bin = np.fix(np.diff(norm_range) / dwave) + 1
+    n_bin = np.int(np.fix(np.diff(norm_range) / dwave) + 1)
     wave1 = norm_range[0]
 
     # SMOOTH 1
