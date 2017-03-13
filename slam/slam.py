@@ -956,6 +956,24 @@ class Slam(object):
 
     def create_mask(self, mask_init, set_range, set_val):
         """ set pixels in wave_ranges to value
+
+        Parameters
+        ----------
+        mask_init:
+            initial mask values
+        set_range:
+            2D list of ranges to be set
+        set_val:
+            the target values of mask, True means good, False means bad
+
+        Returns
+        -------
+        modified mask
+
+        Examples
+        --------
+        >>> test_mask = s.creat_mask(True, [(0, 3900)], False)
+
         """
         # vectorize mask_init
         if np.isscalar(mask_init):
