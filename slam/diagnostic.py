@@ -93,9 +93,36 @@ def compare_labels(label1, label2, labelname1='Label1', labelname2='Label2',
     return fig
 
 
-# TODO: compare spectra!!! urgently!!!
-def compare_spectra(spectra1, spectra2, ofst_step=0.2, plt_max=100):
-    pass
+def compare_spectra(spectra1, spectra2=None, ofst_step=0.2, wave=None,
+                    mediannorm=False, figsize=(10, 6), plt_max=100):
+    """ compare one/two spectra set """
+    n_spec = spectra1.shape[0]
+
+    # if mediannorm is a float, scale spectra to median*
+    if isinstance(mediannorm, float):
+        for i in range(n_spec):
+            spectra1[i] /= np.nanmedian(spectra1[i]) * mediannorm
+        if spectra2 is not None:
+            for i in range(n_spec):
+                spectra2[i] /= np.nanmedian(spectra2[i]) * mediannorm
+
+    # plot the figure
+    fig = plt.figure(fisize=figsize)
+    fig.add_subplot(111)
+    if wave is None:
+        for i in range(n_spec):
+            ofst = i * ofst_step
+            plt.plot(spectra1[i] + ofst, 'b')
+            if spectra2 is not None:
+                plt.plot(spectra2[i] + ofst, 'r')
+    else:
+        for i in range(n_spec):
+            ofst = i * ofst_step
+            plt.plot(wave, spectra1[i] + ofst, 'b')
+            if spectra2 is not None:
+                plt.plot(wave, spectra2[i] + ofst, 'r')
+
+    return fig
 
 
 def single_pixel_diagnostic(svrs,
