@@ -262,7 +262,10 @@ def train_multi_pixels(X, ys, sample_weights, cv,
 
     # parallel run for SVR
     results = Parallel(n_jobs=n_jobs, verbose=verbose) \
-        (delayed(train_func)(X, y, sample_weight, cv, **kwargs)
+        (delayed(train_func)(np.asarray(X, float, order='C'),
+                             np.asarray(y, float, order='C'),
+                             np.asarray(sample_weight, float, order='C'),
+                             **kwargs)
          for y, sample_weight in zip(ys, sample_weights))
 
     # return results
