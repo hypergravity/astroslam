@@ -177,8 +177,11 @@ def normalize_spectra_block(wave, flux_block, norm_range, dwave,
 
     Returns
     -------
-    flux_norm: ndarray
+    flux_norm_block: ndarray
         normalized flux
+
+    flux_cont_block: ndarray
+        continuum flux
 
     """
     if ivar_block is None:
