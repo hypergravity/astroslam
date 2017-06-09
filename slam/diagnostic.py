@@ -107,7 +107,7 @@ def compare_spectra(spectra1, spectra2=None, ofst_step=0.2, wave=None,
                 spectra2[i] /= np.nanmedian(spectra2[i]) * mediannorm
 
     # plot the figure
-    fig = plt.figure(fisize=figsize)
+    fig = plt.figure(figsize=figsize)
     fig.add_subplot(111)
     if wave is None:
         for i in range(n_spec):
