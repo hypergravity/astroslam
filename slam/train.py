@@ -72,7 +72,7 @@ def train_single_pixel(X, y, sample_weight=None, cv=10,
     # Cross-Validation
     if cv is None or cv < 2:
         # no cross-validation will be performed
-        score = np.nan
+        score = np.mean(np.square(svr.predict(X_)-y_))
     else:
         # cross-validation will be performed to calculate MSE
         assert isinstance(cv, int) and cv >= 2
@@ -80,7 +80,6 @@ def train_single_pixel(X, y, sample_weight=None, cv=10,
             svr, X_, y_, scoring='neg_mean_squared_error', cv=cv)
         score = scores.mean()
 
-    # return (svr, score)
     return svr, score
 
 
