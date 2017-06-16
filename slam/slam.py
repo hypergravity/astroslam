@@ -402,7 +402,7 @@ class Slam(object):
         return svr, score
 
     def train_pixels(self, sample_weight_scheme='bool',
-                     cv=10, n_jobs=10, method='simple', verbose=10,
+                     cv=3, n_jobs=10, method='simple', verbose=10,
                      *args, **kwargs):
         """ train pixels usig SVR
 
