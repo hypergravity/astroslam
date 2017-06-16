@@ -27,8 +27,8 @@ import numpy as np
 from joblib import Parallel, delayed
 from scipy import stats
 from scipy.optimize import minimize
-from sklearn import svm, cross_validation
-from sklearn.grid_search import GridSearchCV, RandomizedSearchCV
+from sklearn import svm, model_selection
+from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 
 
 def train_single_pixel(X, y, sample_weight=None, cv=10,
@@ -58,18 +58,24 @@ def train_single_pixel(X, y, sample_weight=None, cv=10,
     """
     # instantiate SVR
     svr = svm.SVR(**kwargs)
+
+    ind_use = sample_weight > 0
+    X_ = X[ind_use]
+    y_ = y[ind_use]
+    sample_weight_ = sample_weight[ind_use]
+
     # fit data
-    svr.fit(X, y, sample_weight=sample_weight)
+    svr.fit(X_, y_, sample_weight=sample_weight_)
 
     # Cross-Validation
-    if cv is None or cv < 3:
+    if cv is None or cv < 2:
         # no cross-validation will be performed
         score = np.nan
     else:
         # cross-validation will be performed to calculate MSE
-        assert isinstance(cv, int) and cv > 3
-        scores = cross_validation.cross_val_score(
-            svr, X, y, scoring='neg_mean_squared_error', cv=cv)
+        assert isinstance(cv, int) and cv >= 2
+        scores = model_selection.cross_val_score(
+            svr, X_, y_, scoring='neg_mean_squared_error', cv=cv)
         score = scores.mean()
 
     # return (svr, score)
@@ -180,8 +186,9 @@ def svr_mse(hyperparam, X, y, verbose=False):
 
     # instantiate
     svr = svm.SVR(gamma=gamma, C=C, epsilon=epsilon)
+
     # MSE
-    scores = cross_validation.cross_val_score(
+    scores = model_selection.cross_val_score(
         svr, X, y, scoring='neg_mean_squared_error', cv=10, verbose=False)
     score = -scores.mean()
 
@@ -217,12 +224,12 @@ def train_single_pixel_mini(X, y, sample_weight=None, cv=10, **kwargs):
 
     """
     # find optimized hyper-parameters
-    hp0 = (1., -1., -12.)
-    hp = minimize(svr_mse, hp0, args=(X, y))
+    hp0 = (-2., .7, -.15)
+    hp = minimize(svr_mse, hp0, args=(X, y, sample_weight))
     gamma, C, epsilon = 10. ** np.array(hp)
 
     # specify hyper-parameters directly
-    return train_single_pixel(X, y, sample_weight=None, cv=cv,
+    return train_single_pixel(X, y, sample_weight=sample_weight, cv=cv,
                               gamma=gamma, C=C, epsilon=epsilon, **kwargs)
 
 
