@@ -72,7 +72,8 @@ class Slam(object):
     #     Basic functions     #
     # ####################### #
 
-    def __init__(self, wave, tr_flux, tr_ivar, tr_labels, scale=True):
+    def __init__(self, wave, tr_flux, tr_ivar, tr_labels, scale=True,
+                 robust=True):
         """ initialize the Slam instance with tr_flux, tr_ivar, tr_labels
 
         Parameters
@@ -116,27 +117,14 @@ class Slam(object):
             self.tr_ivar = tr_ivar
             self.tr_labels = tr_labels
 
-            # standardization
+            # standardization -->
+            # a robust way to set the scale_ to be 0.5*(16, 84) percentile
             self.tr_flux_scaler, self.tr_flux_scaled = \
-                standardize(tr_flux)
+                standardize(tr_flux, robust=robust)
             self.tr_ivar_scaler, self.tr_ivar_scaled = \
                 standardize_ivar(tr_ivar, self.tr_flux_scaler)
             self.tr_labels_scaler, self.tr_labels_scaled = \
-                standardize(tr_labels)
-
-            # TODO: what if there are bad pixels in tr_flux?
-            for i in range(self.tr_flux.shape[1]):
-                ind_use = self.tr_ivar[:, i] > 0
-                if np.sum(ind_use) > 0:
-                    self.tr_flux_scaler.mean_[i] = np.nanmean(
-                        self.tr_flux[ind_use, i])
-                    self.tr_flux_scaler.scale_[i] = np.nanstd(
-                        self.tr_flux[ind_use, i])
-                    self.tr_flux_scaler.var_[i] = np.nanvar(
-                        self.tr_flux[ind_use, i])
-            self.tr_flux_scaler.scale_[
-                np.where(self.tr_flux_scaler.scale_ == 0.)] = 1.
-            self.tr_flux_scaled = self.tr_flux_scaler.transform(self.tr_flux)
+                standardize(tr_labels, robust=robust)
 
             # update dimensions
             self.__update_dims__()

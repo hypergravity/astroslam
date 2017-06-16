@@ -28,7 +28,7 @@ from copy import deepcopy
 from sklearn import preprocessing
 
 
-def standardize(X):
+def standardize(X, robust=False):
     """ Standardize X (flux / labels)
 
     Parameters
@@ -45,7 +45,14 @@ def standardize(X):
         scaled X
 
     """
-    scaler = preprocessing.StandardScaler().fit(X)
+    if robust:
+        scaler = preprocessing.StandardScaler()
+        scaler.scale_ = np.diff(np.nanpercentile(X, (16, 84), axis=0)) / 2.
+        scaler.mean_ = np.nanmedian(X, axis=0)
+    else:
+        scaler = preprocessing.StandardScaler().fit(X)
+
+    scaler.robust = robust
     X_scaled = scaler.transform(X)
     return scaler, X_scaled
 
