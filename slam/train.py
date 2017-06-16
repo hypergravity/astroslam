@@ -59,6 +59,8 @@ def train_single_pixel(X, y, sample_weight=None, cv=10,
     # instantiate SVR
     svr = svm.SVR(**kwargs)
 
+    if sample_weight is None:
+        sample_weight = np.ones_like(y, float)
     ind_use = sample_weight > 0
     X_ = X[ind_use]
     y_ = y[ind_use]
