@@ -64,6 +64,7 @@ class Slam(object):
     hyperparams = Table(data=[np.zeros(0)] * 3,
                         names=['C', 'gamma', 'epsilon'])
     scores = np.zeros((0,))
+    mse = None
     trained = False
     sample_weight = None
     ind_all_bad = None
@@ -480,6 +481,7 @@ class Slam(object):
 
         # set trained to True
         self.trained = True
+        self.mse = None
         return
 
     # ####################### #
@@ -1013,6 +1015,28 @@ class Slam(object):
         flux_pred = predict_spectrum(svrs, X_pred)
 
         return flux_tr, flux_pred
+
+    def training_mse(self, n_jobs=1, verbose=10):
+        """ return Mean Squared Error (MSE) """
+        if self.mse is not None:
+            # if value not ready, calculate them
+            r = Parallel(n_jobs=n_jobs, verbose=verbose)(delayed(mse)(
+                self.svrs[i], self.tr_labels_scaled, self.tr_flux_scaled[:, i],
+                self.tr_ivar_scaled[:, i]) for i in range(self.n_pix))
+            self.mse = np.array(r, float)
+
+        return self.mse
+
+
+def mse(svr, X, y, sample_weight=None):
+    if sample_weight is None:
+        sample_weight = np.ones_like(y, int)
+
+    ind_use = sample_weight > 0
+    X_ = X[ind_use]
+    y_ = y[ind_use]
+    # sample_weight_ = sample_weight[ind_use]
+    return np.mean(np.square(svr.predict(X_)-y_))
 
 
 def _test_repr():
