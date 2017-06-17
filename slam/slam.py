@@ -120,11 +120,12 @@ class Slam(object):
             # standardization -->
             # a robust way to set the scale_ to be 0.5*(16, 84) percentile
             self.tr_flux_scaler, self.tr_flux_scaled = \
-                standardize(tr_flux, robust=robust)
+                standardize(tr_flux, tr_ivar, robust=robust)
             self.tr_ivar_scaler, self.tr_ivar_scaled = \
                 standardize_ivar(tr_ivar, self.tr_flux_scaler)
             self.tr_labels_scaler, self.tr_labels_scaled = \
-                standardize(tr_labels, robust=robust)
+                standardize(tr_labels, None, robust=robust)
+            # TODO: here the weight of tr_labels should be passed in
 
             # update dimensions
             self.__update_dims__()
@@ -403,7 +404,7 @@ class Slam(object):
 
     def train_pixels(self, sample_weight_scheme='bool',
                      cv=3, n_jobs=10, method='simple', verbose=10,
-                     *args, **kwargs):
+                     **kwargs):
         """ train pixels usig SVR
 
         Parameters
@@ -420,7 +421,7 @@ class Slam(object):
             rand: randomized search for optimized hyper-parameters
         verbose:
             verbose level
-        *args, **kwargs:
+        **kwargs:
             will be passed to the svr.fit() method
 
         Returns
@@ -460,7 +461,7 @@ class Slam(object):
         results = train_multi_pixels(self.tr_labels_scaled,
                                      [y for y in self.tr_flux_scaled.T],
                                      [sw_ for sw_ in self.sample_weight.T],
-                                     cv,
+                                     cv=cv,
                                      method=method,
                                      n_jobs=n_jobs,
                                      verbose=verbose,
@@ -472,6 +473,7 @@ class Slam(object):
         for svr, score in results:
             self.svrs.append(svr)
             self.scores.append(score)
+        self.scores = np.array(self.scores)
 
         # update hyper-parameters
         self.__update_hyperparams__()

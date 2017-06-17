@@ -23,12 +23,13 @@ Aims
 
 """
 
+import numpy as np
 from copy import deepcopy
 
 from sklearn import preprocessing
 
 
-def standardize(X, robust=False):
+def standardize(X, weight=None, robust=False):
     """ Standardize X (flux / labels)
 
     Parameters
@@ -45,10 +46,16 @@ def standardize(X, robust=False):
         scaled X
 
     """
+    if weight is None:
+        weight = np.ones_like(X, bool)
+
     if robust:
         scaler = preprocessing.StandardScaler()
-        scaler.scale_ = np.diff(np.nanpercentile(X, (16, 84), axis=0)) / 2.
-        scaler.mean_ = np.nanmedian(X, axis=0)
+        X_ = np.where(weight > 0, X, np.nan)
+        scaler.scale_ = (np.diff(np.nanpercentile(X_, (16, 84), axis=0),
+                                 axis=0) / 2.).flatten()
+        scaler.scale_ = np.where(scaler.scale_ <= 0, 1., scaler.scale_)
+        scaler.mean_ = np.nanmedian(X_, axis=0)
     else:
         scaler = preprocessing.StandardScaler().fit(X)
 

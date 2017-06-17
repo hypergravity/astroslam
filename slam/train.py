@@ -129,7 +129,7 @@ def train_single_pixel_grid(X, y, sample_weight=None, cv=10,
     grid.fit(X, y)
 
     # return (svr, score)
-    return grid.best_estimator_, grid.grid_scores_
+    return grid.best_estimator_, grid.cv_results_
 
 
 def train_single_pixel_rand(X, y, sample_weight=None, cv=10,
@@ -178,7 +178,7 @@ def train_single_pixel_rand(X, y, sample_weight=None, cv=10,
     rand.fit(X, y)
 
     # return (svr, score)
-    return rand.best_estimator_, rand.grid_scores_
+    return rand.best_estimator_, rand.cv_results_
 
 
 def svr_mse(hyperparam, X, y, verbose=False):
@@ -234,7 +234,7 @@ def train_single_pixel_mini(X, y, sample_weight=None, cv=10, **kwargs):
                               gamma=gamma, C=C, epsilon=epsilon, **kwargs)
 
 
-def train_multi_pixels(X, ys, sample_weights, cv,
+def train_multi_pixels(X, ys, sample_weights, cv=1,
                        method='simple', n_jobs=1, verbose=10, **kwargs):
     """ train multi pixels
 
@@ -269,12 +269,13 @@ def train_multi_pixels(X, ys, sample_weights, cv,
     train_func = train_funcs[method]
 
     # parallel run for SVR
-    results = Parallel(n_jobs=n_jobs, verbose=verbose) \
-        (delayed(train_func)(np.asarray(X, float, order='C'),
-                             np.asarray(y, float, order='C'),
-                             np.asarray(sample_weight, float, order='C'),
-                             **kwargs)
-         for y, sample_weight in zip(ys, sample_weights))
+    results = Parallel(n_jobs=n_jobs, verbose=verbose)(
+        delayed(train_func)(np.asarray(X, float, order='C'),
+                            np.asarray(y, float, order='C'),
+                            np.asarray(sample_weight, float, order='C'),
+                            cv=cv,
+                            **kwargs)
+        for y, sample_weight in zip(ys, sample_weights))
 
     # return results
     return results
