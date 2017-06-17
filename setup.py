@@ -4,7 +4,7 @@ from distutils.core import setup
 if __name__ == '__main__':
     setup(
         name='slam',
-        version='0.8.3',
+        version='0.8.4',
         author='Bo Zhang',
         author_email='bozhang@nao.cas.cn',
         description=('A forward model using SVR to estimate stellar parameters'
@@ -25,6 +25,7 @@ if __name__ == '__main__':
                      'extern': 'slam/extern'},
         packages=['slam',
                   'slam/extern'],
+        package_data={'slam': ['data/*.csv']},
         # include_package_data=True,
         requires=['numpy',
                   'scipy',
