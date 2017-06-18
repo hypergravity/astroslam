@@ -652,18 +652,20 @@ class Slam(object):
         # 5. update test_ivar : negative ivar set to 0
         # test_ivar = np.where((test_ivar >= 0.) * (np.isfinite(test_ivar)),
         #                      test_ivar, np.zeros_like(test_ivar))
-        test_ivar = np.where((test_ivar >= ivar_eps) * (np.isfinite(test_ivar)),
-                             test_ivar, np.zeros_like(test_ivar))
+        test_ivar = np.where(
+            np.logical_and(test_ivar >= ivar_eps, np.isfinite(test_ivar)),
+            test_ivar, np.zeros_like(test_ivar))
 
         # 5'. take into account model error
-        # fix model_ivar
-        model_ivar = np.where(
-            np.logical_and(model_ivar > ivar_eps, np.isfinite(model_ivar)),
-            model_ivar, 0.)
-        # calculate total_ivar
-        test_ivar = np.where(
-            np.logical_or(model_ivar < ivar_eps, test_ivar < ivar_eps), 0.,
-            test_ivar * model_ivar / (test_ivar + model_ivar))
+        if model_ivar is not None:
+            # fix model_ivar
+            model_ivar = np.where(
+                np.logical_and(model_ivar > ivar_eps, np.isfinite(model_ivar)),
+                model_ivar, 0.)
+            # calculate total_ivar
+            test_ivar = np.where(
+                np.logical_or(model_ivar < ivar_eps, test_ivar < ivar_eps), 0.,
+                test_ivar * model_ivar / (test_ivar + model_ivar))
         # fix total_ivar
         test_ivar = np.where(np.isfinite(test_ivar), test_ivar, 0.)
 
