@@ -491,7 +491,7 @@ class Slam(object):
     # TODO: prediction functions forms should be confirmed
 
     def predict_labels(self, X0, test_flux, test_ivar=None, mask=None,
-                      flux_scaler=True, labels_scaler=True, **kwargs):
+                       flux_scaler=True, labels_scaler=True, **kwargs):
         """ predict labels for a given test spectrum (single)
 
         Parameters
@@ -565,7 +565,8 @@ class Slam(object):
 
     # in this method, do not use scaler defined in predict_labels()
     def predict_labels_multi(self, X0, test_flux, test_ivar=None, mask=None,
-                             flux_eps=None, flux_scaler=True, ivar_scaler=True,
+                             model_ivar=None, flux_eps=None, ivar_eps=1e-200,
+                             flux_scaler=True, ivar_scaler=True,
                              labels_scaler=True, n_jobs=1, verbose=False,
                              **kwargs):
         """ predict labels for a given test spectrum (multiple)
@@ -580,8 +581,14 @@ class Slam(object):
             test ivar array
         mask : bool ndarray (n_test, n_pix)
             manual mask, False pixels are not evaluated for speed up
+        model_ivar: ndarray (n_pix,), default None
+            the model error in scaled space.
+            if None, 0 would be adopted.
+            usually MSE could be used.
         flux_scaler : scaler object
             flux scaler. if False, it doesn't perform scaling
+        ivar_scaler : scaler object
+            ivar scaler. if False, it doesn't perform scaling
         labels_scaler : scaler object
             labels scaler. if False, it doesn't perform scaling
         n_jobs: int
@@ -622,7 +629,6 @@ class Slam(object):
             test_flux = flux_scaler.transform(test_flux)
 
         # 3. set default mask, test_ivar
-
         # mask must be set here!
         if mask is None:
             # no mask is set
@@ -632,7 +638,6 @@ class Slam(object):
             mask = np.array([mask for _ in range(n_test)])
 
         # 4. scale test_ivar
-
         # test_ivar must be set here!
         if test_ivar is None:
             # test_ivar=None, directly set test_ivar
@@ -645,8 +650,22 @@ class Slam(object):
             # don't do scaling for test_ivar
 
         # 5. update test_ivar : negative ivar set to 0
-        test_ivar = np.where((test_ivar >= 0.) * (np.isfinite(test_ivar)),
+        # test_ivar = np.where((test_ivar >= 0.) * (np.isfinite(test_ivar)),
+        #                      test_ivar, np.zeros_like(test_ivar))
+        test_ivar = np.where((test_ivar >= ivar_eps) * (np.isfinite(test_ivar)),
                              test_ivar, np.zeros_like(test_ivar))
+
+        # 5'. take into account model error
+        # fix model_ivar
+        model_ivar = np.where(
+            np.logical_and(model_ivar > ivar_eps, np.isfinite(model_ivar)),
+            model_ivar, 0.)
+        # calculate total_ivar
+        test_ivar = np.where(
+            np.logical_or(model_ivar < ivar_eps, test_ivar < ivar_eps), 0.,
+            test_ivar * model_ivar / (test_ivar + model_ivar))
+        # fix total_ivar
+        test_ivar = np.where(np.isfinite(test_ivar), test_ivar, 0.)
 
         # 6. update mask for low ivar pixels
         # test_ivar_threshold = np.array(
@@ -660,9 +679,12 @@ class Slam(object):
             mask = np.logical_and(mask, test_flux > flux_eps)
         else:
             mask = np.logical_and(mask, test_ivar > 0.)
+        print("@SLAM: The spectra with fewest pixels unmasked is "
+              "[{}/{}]".format(np.min(np.sum(mask, axis=1)), self.n_pix))
 
         # 7. test_ivar normalization
-        test_ivar /= np.sum(test_ivar, axis=1).reshape(-1, 1)
+        # test_ivar /= np.sum(test_ivar, axis=1).reshape(-1, 1)
+        test_ivar /= np.percentile(test_ivar, 90, axis=1).reshape(-1, 1)
 
         assert test_flux.shape == test_ivar.shape
         assert test_flux.shape == mask.shape
@@ -1018,7 +1040,8 @@ class Slam(object):
 
     def training_mse(self, n_jobs=1, verbose=10):
         """ return Mean Squared Error (MSE) """
-        if self.mse is not None:
+        if self.mse is None:
+            print("@SLAM: MSE is not available and will be calculated now!")
             # if value not ready, calculate them
             r = Parallel(n_jobs=n_jobs, verbose=verbose)(delayed(mse)(
                 self.svrs[i], self.tr_labels_scaled, self.tr_flux_scaled[:, i],
@@ -1029,14 +1052,18 @@ class Slam(object):
 
 
 def mse(svr, X, y, sample_weight=None):
+    """ return MSE for svr, X, y and sample_weight """
     if sample_weight is None:
         sample_weight = np.ones_like(y, int)
 
     ind_use = sample_weight > 0
-    X_ = X[ind_use]
-    y_ = y[ind_use]
-    # sample_weight_ = sample_weight[ind_use]
-    return np.mean(np.square(svr.predict(X_)-y_))
+    if np.sum(ind_use) > 0:
+        X_ = X[ind_use]
+        y_ = y[ind_use]
+        # sample_weight_ = sample_weight[ind_use]
+        return np.mean(np.square(svr.predict(X_) - y_))
+    else:
+        return 0.
 
 
 def _test_repr():
