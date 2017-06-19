@@ -490,7 +490,7 @@ class Slam(object):
 
         # set trained to True
         self.trained = True
-        self.mse = None
+        self.nmse = None
         return
 
     # ####################### #
@@ -593,7 +593,7 @@ class Slam(object):
         model_ivar: ndarray (n_pix,), default None
             the model error in scaled space.
             if None, 0 would be adopted.
-            usually MSE could be used.
+            usually 1/(-NMSE) could be used.
         flux_scaler : scaler object
             flux scaler. if False, it doesn't perform scaling
         ivar_scaler : scaler object
@@ -1050,16 +1050,16 @@ class Slam(object):
         return flux_tr, flux_pred
 
     def training_nmse(self, n_jobs=1, verbose=10):
-        """ return Mean Squared Error (MSE) """
+        """ return Negarive Mean Squared Error (NMSE) """
         if self.nmse is None:
-            print("@SLAM: MSE is not available and will be calculated now!")
+            print("@SLAM: NMSE is not available and will be calculated now!")
             # if value not ready, calculate them
             ind_good_pixels = ((self.tr_ivar > 0.) *
                                (self.tr_flux > 0.) *
                                np.isfinite(self.tr_ivar) *
                                np.isfinite(self.tr_flux))
             sample_weight = ind_good_pixels.astype(np.float)
-            r = Parallel(n_jobs=n_jobs, verbose=verbose)(delayed(mse)(
+            r = Parallel(n_jobs=n_jobs, verbose=verbose)(delayed(nmse)(
                 self.svrs[i], self.tr_labels_scaled, self.tr_flux_scaled[:, i],
                 sample_weight[:, i]) for i in range(self.n_pix))
             self.nmse = np.array(r, float)
@@ -1076,7 +1076,7 @@ class Slam(object):
 
         fig.sca(axs[1])
         plt.plot(self.wave, -self.scores, label='cross validated MSE')
-        plt.plot(self.wave, self.training_nmse(30), label='training MSE')
+        plt.plot(self.wave, -self.training_nmse(30), label='training MSE')
         plt.hlines(.25, self.wave[0], self.wave[-1], linestyle='--', color='gray')
         plt.legend(loc=5, framealpha=.3)
 
@@ -1099,7 +1099,7 @@ class Slam(object):
 
 
 def nmse(svr, X, y, sample_weight=None):
-    """ return MSE for svr, X, y and sample_weight """
+    """ return NMSE for svr, X, y and sample_weight """
     if sample_weight is None:
         sample_weight = np.ones_like(y, int)
 
@@ -1108,7 +1108,7 @@ def nmse(svr, X, y, sample_weight=None):
         X_ = X[ind_use]
         y_ = y[ind_use]
         # sample_weight_ = sample_weight[ind_use]
-        return np.mean(np.square(svr.predict(X_) - y_))
+        return -np.mean(np.square(svr.predict(X_) - y_))
     else:
         return 0.
 
