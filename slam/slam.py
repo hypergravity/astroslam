@@ -30,6 +30,7 @@ import os
 import numpy as np
 from astropy.table import Table
 from joblib import load, dump, Parallel, delayed
+import matplotlib.pyplot as plt
 
 from .hyperparameter import summarize_hyperparameters_to_table, summarize_table
 from .predict import predict_labels, predict_labels_chi2, predict_spectrum
@@ -1064,6 +1065,37 @@ class Slam(object):
             self.nmse = np.array(r, float)
 
         return self.nmse
+
+    def plot_training_performance(self, fontsize=20):
+        plt.rcParams.update({"font.size":fontsize})
+        fig, axs = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
+        fig.sca(axs[0])
+        plt.plot(self.wave, self.tr_flux_scaler.mean_, label='flux mean')
+        plt.plot(self.wave, self.tr_flux_scaler.scale_, label='flux scale')
+        plt.legend(loc=5, framealpha=.3)
+
+        fig.sca(axs[1])
+        plt.plot(self.wave, -self.scores, label='cross validated MSE')
+        plt.plot(self.wave, self.training_nmse(30), label='training MSE')
+        plt.hlines(.25, self.wave[0], self.wave[-1], linestyle='--', color='gray')
+        plt.legend(loc=5, framealpha=.3)
+
+        fig.sca(axs[2])
+        plt.plot(self.wave, np.log10(self.hyperparams['C']),
+                 label='$\\log(C)$')
+        plt.plot(self.wave, np.log10(self.hyperparams['gamma']),
+                 label='$\\log(\gamma)$')
+        plt.plot(self.wave, np.log10(self.hyperparams['epsilon']),
+                 label='$\\log(\epsilon)$')
+        plt.legend(loc=5, framealpha=.3)
+
+        plt.xlabel('$\lambda$ ($\\rm \AA$)')
+        plt.xlim(self.wave[[0, -1]])
+
+        fig.tight_layout()
+        fig.subplots_adjust(hspace=0)
+
+        return fig, axs
 
 
 def nmse(svr, X, y, sample_weight=None):
