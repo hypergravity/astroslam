@@ -10,7 +10,10 @@ Bo Zhang (bozhang@nao.cas.cn)
 
 # Installation
 
-`pip install slam`
+Currently, you have to download the package and install it using
+`(sudo) python setup.py install`.
+
+In the future, use `pip install slam`.
 
 
 # Requirements
