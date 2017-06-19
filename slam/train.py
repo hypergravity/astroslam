@@ -72,7 +72,7 @@ def train_single_pixel(X, y, sample_weight=None, cv=10,
     # Cross-Validation
     if cv is None or cv < 2:
         # no cross-validation will be performed
-        score = np.mean(np.square(svr.predict(X_)-y_))
+        score = -np.mean(np.square(svr.predict(X_) - y_))
     else:
         # cross-validation will be performed to calculate MSE
         assert isinstance(cv, int) and cv >= 2
@@ -129,7 +129,7 @@ def train_single_pixel_grid(X, y, sample_weight=None, cv=10,
     grid.fit(X, y)
 
     # return (svr, score)
-    return grid.best_estimator_, grid.cv_results_
+    return grid, grid.best_score_
 
 
 def train_single_pixel_rand(X, y, sample_weight=None, cv=10,
@@ -178,7 +178,7 @@ def train_single_pixel_rand(X, y, sample_weight=None, cv=10,
     rand.fit(X, y)
 
     # return (svr, score)
-    return rand.best_estimator_, rand.cv_results_
+    return rand, rand.best_score_
 
 
 def svr_mse(hyperparam, X, y, verbose=False):
@@ -249,7 +249,7 @@ def train_multi_pixels(X, ys, sample_weights, cv=1,
     cv: int
         number of fold in Cross-Validation
     method: string
-        {'simpoe', 'grid', 'rand'}
+        {'simple', 'grid', 'rand'}
     n_jobs: int
         number of processes that will be launched by joblib
     verbose: int
@@ -269,13 +269,16 @@ def train_multi_pixels(X, ys, sample_weights, cv=1,
     train_func = train_funcs[method]
 
     # parallel run for SVR
+    data = []
+    for y, sample_weight in zip(ys, sample_weights):
+        this_X = np.asarray(X, float, order='C')
+        this_y = np.asarray(y, float, order='C')
+        this_sw = np.asarray(sample_weight, float, order='C')
+        this_ind = this_sw > 0
+        data.append((this_X[this_ind], this_y[this_ind], this_sw[this_ind]))
+
     results = Parallel(n_jobs=n_jobs, verbose=verbose)(
-        delayed(train_func)(np.asarray(X, float, order='C'),
-                            np.asarray(y, float, order='C'),
-                            np.asarray(sample_weight, float, order='C'),
-                            cv=cv,
-                            **kwargs)
-        for y, sample_weight in zip(ys, sample_weights))
+        delayed(train_func)(*this_data, cv=cv, **kwargs) for this_data in data)
 
     # return results
     return results

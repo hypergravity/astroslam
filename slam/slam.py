@@ -64,7 +64,7 @@ class Slam(object):
     hyperparams = Table(data=[np.zeros(0)] * 3,
                         names=['C', 'gamma', 'epsilon'])
     scores = np.zeros((0,))
-    mse = None
+    nmse = None
     trained = False
     sample_weight = None
     ind_all_bad = None
@@ -74,7 +74,7 @@ class Slam(object):
     # ####################### #
 
     def __init__(self, wave, tr_flux, tr_ivar, tr_labels, scale=True,
-                 robust=True):
+                 robust=False):
         """ initialize the Slam instance with tr_flux, tr_ivar, tr_labels
 
         Parameters
@@ -87,6 +87,14 @@ class Slam(object):
             training ivar
         tr_labels: ndarray with a shape of (n_obs x n_dim)
             training labels
+        scale: bool, default True
+            if True, scale the input flux and labels
+        robust: bool, default False
+            if True, use mean and std to scale flux and labels,
+            otherwise, use (p84+p16)/2 and the (p84-p16)/2
+            Only use this when there are extreme values, 
+            or it will affect the scores!
+            
 
         Returns
         -------
@@ -951,7 +959,7 @@ class Slam(object):
     def single_pixel_diagnostic(self,
                                 i_pixel,
                                 test_labels,
-                                diag_dim=(0,),
+                                diag_dim=(0, 1),
                                 labels_scaler='default',
                                 flux_scaler='default'):
         if labels_scaler is 'default':
@@ -1040,20 +1048,25 @@ class Slam(object):
 
         return flux_tr, flux_pred
 
-    def training_mse(self, n_jobs=1, verbose=10):
+    def training_nmse(self, n_jobs=1, verbose=10):
         """ return Mean Squared Error (MSE) """
-        if self.mse is None:
+        if self.nmse is None:
             print("@SLAM: MSE is not available and will be calculated now!")
             # if value not ready, calculate them
+            ind_good_pixels = ((self.tr_ivar > 0.) *
+                               (self.tr_flux > 0.) *
+                               np.isfinite(self.tr_ivar) *
+                               np.isfinite(self.tr_flux))
+            sample_weight = ind_good_pixels.astype(np.float)
             r = Parallel(n_jobs=n_jobs, verbose=verbose)(delayed(mse)(
                 self.svrs[i], self.tr_labels_scaled, self.tr_flux_scaled[:, i],
-                self.tr_ivar_scaled[:, i]) for i in range(self.n_pix))
-            self.mse = np.array(r, float)
+                sample_weight[:, i]) for i in range(self.n_pix))
+            self.nmse = np.array(r, float)
 
-        return self.mse
+        return self.nmse
 
 
-def mse(svr, X, y, sample_weight=None):
+def nmse(svr, X, y, sample_weight=None):
     """ return MSE for svr, X, y and sample_weight """
     if sample_weight is None:
         sample_weight = np.ones_like(y, int)
