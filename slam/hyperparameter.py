@@ -25,6 +25,8 @@ Aims
 
 import numpy as np
 from astropy.table import Table
+from sklearn.svm import SVR
+from sklearn.model_selection import GridSearchCV
 
 
 __all__ = ['summarize_hyperparameters_to_table', 'summarize_table']
@@ -39,7 +41,15 @@ def summarize_hyperparameters_to_table(svrs):
         a list of fitted SVR objets
 
     """
-    hp_array = np.array([(svr.C, svr.gamma, svr.epsilon) for svr in svrs])
+    hyperparams = []
+    for svr in svrs:
+        if isinstance(svr, SVR):
+            hyperparams.append((svr.C, svr.gamma, svr.epsilon))
+        elif isinstance(svr, GridSearchCV):
+            hyperparams.append((svr.best_estimator_.C,
+                                svr.best_estimator_.gamma,
+                                svr.best_estimator_.epsilon))
+    hp_array = np.array(hyperparams)
     return Table(data=hp_array, names=['C', 'gamma', 'epsilon'])
 
 
