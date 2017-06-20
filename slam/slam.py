@@ -32,7 +32,9 @@ from astropy.table import Table
 from joblib import load, dump, Parallel, delayed
 import matplotlib.pyplot as plt
 
-from .hyperparameter import summarize_hyperparameters_to_table, summarize_table
+from .hyperparameter import (summarize_hyperparameters_to_table,
+                             summarize_table,
+                             hyperparameter_grid_stats)
 from .predict import predict_labels, predict_labels_chi2, predict_spectrum
 from .standardization import standardize, standardize_ivar
 from .train import train_multi_pixels, train_single_pixel
@@ -66,6 +68,9 @@ class Slam(object):
                         names=['C', 'gamma', 'epsilon'])
     scores = np.zeros((0,))
     nmse = None
+    stats_train = None
+    stats_test = None
+
     trained = False
     sample_weight = None
     ind_all_bad = None
@@ -284,6 +289,12 @@ class Slam(object):
             summarize_table(self.hyperparams[mask])
 
         return
+
+    def hyperparameter_grid_stats(self, pivot=("param_C", "param_gamma"),
+                                  n_jobs=10, verbose=10):
+        self.stats_train, self.stats_test = hyperparameter_grid_stats(
+            self.svrs, pivot=pivot, n_jobs=n_jobs, verbose=verbose)
+        return self.stats_train, self.stats_test
 
     def pprint(self, mask=None):
         """ print info about self & hyper-parameters """
