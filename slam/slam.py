@@ -75,7 +75,7 @@ class Slam(object):
     # ####################### #
 
     def __init__(self, wave, tr_flux, tr_ivar, tr_labels, scale=True,
-                 robust=False):
+                 robust=False, flux_threshold=(1e-10, 100)):
         """ initialize the Slam instance with tr_flux, tr_ivar, tr_labels
 
         Parameters
@@ -114,6 +114,26 @@ class Slam(object):
             # assert input data shape consistency
             assert tr_flux.shape == tr_ivar.shape
             assert tr_flux.shape[0] == tr_labels.shape[0]
+
+            # to make dataset valid
+            if flux_threshold is not None:
+                ind_in_bounds = (tr_flux > flux_threshold[0]) & \
+                                (tr_flux < flux_threshold[1])
+                ind_finite = np.isfinite(tr_flux) & np.isfinite(tr_ivar)
+                ind_ivar_valid = tr_ivar > 1.
+                ind_need_reset = np.logical_not(
+                    ind_in_bounds & ind_finite & ind_ivar_valid)
+                # not in bounds, or infinite, or ivar too small
+                sum_need_reset = np.sum(ind_need_reset, axis=1)
+                print("@SLAM: {} spectra need to be reset".format(
+                    np.sum(sum_need_reset > 0)))
+                print("----------------------------------")
+                for i, this_sum_need_reset in enumerate(sum_need_reset):
+                    if this_sum_need_reset > 0:
+                        print("@SLAM: [{}] {} pixels need to be reset ..."
+                              "".format(i, this_sum_need_reset))
+                tr_flux = np.where(ind_need_reset, 0., tr_flux)
+                tr_ivar = np.where(ind_need_reset, 0., tr_ivar)
 
         except:
             raise (ValueError(
@@ -1065,6 +1085,22 @@ class Slam(object):
             self.nmse = np.array(r, float)
 
         return self.nmse
+
+    @property
+    def automask(self, min_num_pix=0.6, ivar_eps=1e-200):
+        if isinstance(min_num_pix, int):
+            # absolute value
+            pass
+        elif isinstance(min_num_pix, float):
+            # relative value
+            min_num_pix = np.round(self.n_obs * min_num_pix)
+
+        return (self.tr_ivar > ivar_eps) & \
+               (np.sum(self.tr_ivar > 0, axis=0) > min_num_pix)
+
+    # ############## #
+    # plotting tools #
+    # ############## #
 
     def plot_training_performance(self, fontsize=20):
         plt.rcParams.update({"font.size":fontsize})
