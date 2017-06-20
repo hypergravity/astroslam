@@ -26,6 +26,7 @@ Aims
 import numpy as np
 from scipy.optimize import minimize, least_squares, curve_fit
 from matplotlib import pyplot as plt
+from lmfit.models import GaussianModel
 
 
 # ################ #
@@ -165,6 +166,83 @@ def label_diff_bin(label1, label2, plot=False):
 
     return bias, scatter
 
+
+# ############################### #
+# binned gaussian fit using LMFIT
+# ############################### #
+
+def gfit_bin_lmfit(data, bins='', bin_std=3, plot=False):
+    if bins == 'robust':
+        bins = np.arange(np.min(data), np.max(data), np.std(data)/bin_std)
+
+    # binned statistics
+    hist, bin_edges = np.histogram(data, bins=bins)
+    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+    
+    # fit a gaussian model to data using LMFIT
+    gm = GaussianModel()
+    theta_guess = gm.guess(hist, x=bin_centers)
+    fr = gm.fit(hist, theta_guess, x=bin_centers, method="least_squares")
+    # fr.fit_report()
+
+    return (fr.values['amplitude'], fr.values['center'], fr.values['sigma']),fr
+
+
+def label_diff_lmfit(label1, label2, bins='robust', bin_std=3, plot=False):
+    """ label difference between label2 and label1(truth)
+    
+    Parameters
+    ----------
+    label1:
+        truth
+    label2:
+        guess
+    bins: str
+        "auto" is recommended
+    bin_std:
+        binwidth = std/bin_std
+    plot: bool
+        if True, plot figure
+
+    Returns
+    -------
+
+    """
+    label1 = np.array(label1)
+    label2 = np.array(label2)
+    assert label1.shape == label2.shape
+
+    n_obs, n_dim = label1.shape
+    amp = np.zeros((n_dim,), dtype=float)
+    bias = np.zeros((n_dim,), dtype=float)
+    scatter = np.zeros((n_dim,), dtype=float)
+    frs = np.zeros((n_dim,), dtype=object)
+
+    for i_dim in range(n_dim):
+        data = label2[:, i_dim] - label1[:, i_dim]
+        theta, frs[i_dim] = \
+            gfit_bin_lmfit(data, bins=bins, bin_std=bin_std, plot=False)
+        amp[i_dim], bias[i_dim], scatter[i_dim] = theta
+            
+    if plot:
+        gm = GaussianModel()
+        fig = plt.figure(figsize=(3*n_dim, 4))
+        for i_dim in range(n_dim):
+            ax = fig.add_subplot(1, n_dim, i_dim+1)
+            data = label2[:, i_dim] - label1[:, i_dim]
+
+            # binned statistics
+            if bins == 'robust':
+                bins = np.arange(
+                    np.min(data), np.max(data), np.std(data) / bin_std)
+            hist, bin_edges = np.histogram(data, bins=bins)
+            # bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+            # bin_xx = np.linspace(bin_edges[0], bin_edges[-1], 100)
+            print(bin_edges)
+            ax.hist(data, bins=bin_edges, histtype='step')
+            ax.plot(bin_edges, gm.eval(frs[i_dim].params, x=bin_edges))
+
+    return bias, scatter, frs
 
 if __name__ == "__main__":
     test_gfit_mle()
