@@ -27,10 +27,56 @@ import numpy as np
 from astropy.table import Table
 from sklearn.svm import SVR
 from sklearn.model_selection import GridSearchCV
+from copy import deepcopy
+import pandas as pd
+from joblib import Parallel, delayed
 
 
 __all__ = ['summarize_hyperparameters_to_table', 'summarize_table']
 
+
+# ############################ #
+# to summarize grid parameters #
+# ############################ #
+def hyperparameter_grid_stats(svrs, pivot=("param_C", "param_gamma"),
+                              n_jobs=10, verbose=10):
+    """ statistics for GridSearchCV results """
+    stats_train = []
+    stats_test = []
+    r = Parallel(n_jobs=n_jobs, verbose=verbose)(
+        delayed(hyperparameter_grid_stats_)(svr, pivot=pivot) for svr in svrs)
+    for i in range(len(r)):
+        stats_train.append(r[i][0])
+        stats_test.append(r[i][1])
+    return stats_train, stats_test
+
+
+def hyperparameter_grid_stats_(svr, pivot=("param_C", "param_gamma")):
+    """ statistics for GridSearchCV results """
+    if isinstance(svr, GridSearchCV):
+        # yes, that's it
+        cvr = svr.cv_results_
+        stats_train_ = deepcopy(cvr)
+        stats_test_ = deepcopy(cvr)
+        for k in cvr.keys():
+            if k.find("test") > -1:
+                stats_train_.pop(k)
+            elif k.find("train") > -1:
+                stats_test_.pop(k)
+
+        if pivot is not None:
+            return (
+                pd.DataFrame(stats_train_).pivot(*pivot, "mean_train_score"),
+                pd.DataFrame(stats_test_).pivot(*pivot, "mean_test_score"))
+        else:
+            return pd.DataFrame(stats_train_), pd.DataFrame(stats_test_)
+    else:
+        return pd.DataFrame(), pd.DataFrame()
+
+
+# ######################## #
+# summarize best estimator #
+# ######################## #
 
 def summarize_hyperparameters_to_table(svrs):
     """ summarize hyper-parameters as a Table
