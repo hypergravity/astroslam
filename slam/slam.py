@@ -1097,8 +1097,7 @@ class Slam(object):
 
         return self.nmse
 
-    @property
-    def automask(self, min_num_pix=0.6, ivar_eps=1e-200):
+    def automask(self, flux, ivar, min_num_pix=0.6, ivar_eps=1e-10):
         if isinstance(min_num_pix, int):
             # absolute value
             pass
@@ -1106,8 +1105,8 @@ class Slam(object):
             # relative value
             min_num_pix = np.round(self.n_obs * min_num_pix)
 
-        return (self.tr_ivar > ivar_eps) & \
-               (np.sum(self.tr_ivar > 0, axis=0) > min_num_pix)
+        return (flux > 0) & (ivar > ivar_eps) & \
+               (np.sum(self.tr_ivar > ivar_eps, axis=0) > min_num_pix)
 
     # ############## #
     # plotting tools #
