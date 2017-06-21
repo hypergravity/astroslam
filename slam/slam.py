@@ -27,19 +27,21 @@ from __future__ import print_function
 
 import os
 
+import matplotlib.pyplot as plt
 import numpy as np
 from astropy.table import Table
 from joblib import load, dump, Parallel, delayed
-import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
 
+from .diagnostic import compare_labels, single_pixel_diagnostic
 from .hyperparameter import (summarize_hyperparameters_to_table,
                              summarize_table,
                              hyperparameter_grid_stats)
+from .mcmc import predict_label_mcmc
 from .predict import predict_labels, predict_labels_chi2, predict_spectrum
+from .specutils import convolve_mask
 from .standardization import standardize, standardize_ivar
 from .train import train_multi_pixels, train_single_pixel
-from .mcmc import predict_label_mcmc
-from .diagnostic import compare_labels, single_pixel_diagnostic
 
 __all__ = ['Slam']
 
@@ -51,6 +53,8 @@ class Slam(object):
     tr_flux = np.zeros((0, 0))
     tr_ivar = np.zeros((0, 0))
     tr_labels = np.zeros((0, 0))
+    tr_mask = np.zeros((0, 0), bool)
+    ivar_eps = 1.
 
     # training data scalers
     tr_flux_scaler = np.zeros((0, 0))
@@ -61,6 +65,11 @@ class Slam(object):
     n_obs = 0
     n_pix = 0
     n_dim = 0
+
+    ccoef = None
+    init_kwargs = {}
+    heal_kwargs = {}
+
 
     # SVR result list
     svrs = []
@@ -80,7 +89,8 @@ class Slam(object):
     # ####################### #
 
     def __init__(self, wave, tr_flux, tr_ivar, tr_labels, scale=True,
-                 robust=False, flux_threshold=(1e-10, 100)):
+                 robust=False, mask_conv=(1, 2), flux_bounds=(1e-3, 1e2),
+                 ivar_eps=1e0):
         """ initialize the Slam instance with tr_flux, tr_ivar, tr_labels
 
         Parameters
@@ -121,24 +131,18 @@ class Slam(object):
             assert tr_flux.shape[0] == tr_labels.shape[0]
 
             # to make dataset valid
-            if flux_threshold is not None:
-                ind_in_bounds = (tr_flux > flux_threshold[0]) & \
-                                (tr_flux < flux_threshold[1])
-                ind_finite = np.isfinite(tr_flux) & np.isfinite(tr_ivar)
-                ind_ivar_valid = tr_ivar > 1.
-                ind_need_reset = np.logical_not(
-                    ind_in_bounds & ind_finite & ind_ivar_valid)
-                # not in bounds, or infinite, or ivar too small
-                sum_need_reset = np.sum(ind_need_reset, axis=1)
-                print("@SLAM: {} spectra need to be reset".format(
-                    np.sum(sum_need_reset > 0)))
-                print("----------------------------------")
-                for i, this_sum_need_reset in enumerate(sum_need_reset):
-                    if this_sum_need_reset > 0:
-                        print("@SLAM: [{}] {} pixels need to be reset ..."
-                              "".format(i, this_sum_need_reset))
-                tr_flux = np.where(ind_need_reset, 0., tr_flux)
-                tr_ivar = np.where(ind_need_reset, 0., tr_ivar)
+            tr_flux, tr_ivar, tr_labels = self.heal_the_world(
+                tr_flux, tr_ivar, tr_labels, mask_conv=mask_conv,
+                flux_bounds=flux_bounds, ivar_eps=ivar_eps)
+            self.init_kwargs = dict(scale=scale,
+                                    robust=robust,
+                                    mask_conv=mask_conv,
+                                    flux_bounds=flux_bounds,
+                                    ivar_eps=ivar_eps)
+            self.heal_kwargs = dict(mask_conv=mask_conv,
+                                    flux_bounds=flux_bounds,
+                                    ivar_eps=ivar_eps)
+            self.ivar_eps = ivar_eps
 
         except:
             raise (ValueError(
@@ -151,6 +155,7 @@ class Slam(object):
             self.tr_flux = tr_flux
             self.tr_ivar = tr_ivar
             self.tr_labels = tr_labels
+            self.tr_mask = tr_ivar > 0
 
             # standardization -->
             # a robust way to set the scale_ to be 0.5*(16, 84) percentile
@@ -172,6 +177,7 @@ class Slam(object):
             self.tr_flux = tr_flux
             self.tr_ivar = tr_ivar
             self.tr_labels = tr_labels
+            self.tr_mask = tr_ivar > 0
 
             # without standardization
             self.tr_flux_scaled = tr_flux
@@ -475,16 +481,14 @@ class Slam(object):
         """
         # determine sample_weight
         assert sample_weight_scheme in ('alleven', 'bool', 'ivar')
+
         if sample_weight_scheme is 'alleven':
             # all even (some bad pixels do disturb!)
             sample_weight = np.ones_like(self.tr_flux_scaled)
+
         elif sample_weight_scheme is 'bool':
             # 0|1 scheme for training flux (recommended)
-            ind_good_pixels = ((self.tr_ivar > 0.) *
-                               (self.tr_flux > 0.) *
-                               np.isfinite(self.tr_ivar) *
-                               np.isfinite(self.tr_flux))
-            sample_weight = ind_good_pixels.astype(np.float)
+            sample_weight = self.tr_mask.astype(np.float)
             ind_all_bad = np.sum(sample_weight, axis=0) < 1.
             for i_pix in np.arange(sample_weight.shape[1]):
                 if ind_all_bad[i_pix]:
@@ -492,6 +496,7 @@ class Slam(object):
                     # reset sample weight to 1
                     sample_weight[:, i_pix] = 1.
             self.ind_all_bad = ind_all_bad
+
         elif sample_weight_scheme is 'ivar':
             # according to ivar (may cause bias due to sampling)
             sample_weight = self.tr_ivar_scaled
@@ -584,19 +589,25 @@ class Slam(object):
         return X_pred
 
     def predict_labels_quick(self, test_flux, test_ivar,
-                             tplt_flux=None, tplt_labels=None, n_sparse=1,
+                             tplt_flux=None, tplt_ivar=None,
+                             tplt_labels=None, n_sparse=1,
                              n_jobs=1, verbose=False):
         """ a quick chi2 search for labels """
 
-        if tplt_flux is None and tplt_labels is None:
+        test_flux, test_ivar = self.heal_the_world(
+            test_flux, test_ivar, **self.heal_kwargs)
+
+        if tplt_flux is None and tplt_labels is None and tplt_ivar is None:
             # use default tplt_flux & tplt_labels
             X_quick = predict_labels_chi2(self.tr_flux[::n_sparse, :],
+                                          self.tr_ivar[::n_sparse, :],
                                           self.tr_labels[::n_sparse, :],
                                           test_flux, test_ivar,
                                           n_jobs=n_jobs, verbose=verbose)
         else:
             # use user-defined tplt_flux & tplt_labels
             X_quick = predict_labels_chi2(tplt_flux[::n_sparse, :],
+                                          tplt_ivar[::n_sparse, :],
                                           tplt_labels[::n_sparse, :],
                                           test_flux, test_ivar,
                                           n_jobs=n_jobs, verbose=verbose)
@@ -604,8 +615,8 @@ class Slam(object):
         return X_quick
 
     # in this method, do not use scaler defined in predict_labels()
-    def predict_labels_multi(self, X0, test_flux, test_ivar=None, mask=None,
-                             model_ivar=None, flux_eps=None, ivar_eps=1e-200,
+    def predict_labels_multi(self, X0, test_flux, test_ivar=None, mask="auto",
+                             model_ivar=None, flux_eps=None, ivar_eps=1e0,
                              flux_scaler=True, ivar_scaler=True,
                              labels_scaler=True, n_jobs=1, verbose=False,
                              **kwargs):
@@ -645,6 +656,10 @@ class Slam(object):
         ** all input should be 2D array or sequential **
 
         """
+
+        test_flux, test_ivar = self.heal_the_world(
+            test_flux, test_ivar, **self.heal_kwargs)
+
         # 0. determine n_test
         n_test = test_flux.shape[0]
 
@@ -676,6 +691,7 @@ class Slam(object):
         elif mask.ndim == 1 and len(mask) == test_flux.shape[1]:
             # if only one mask is specified
             mask = np.array([mask for _ in range(n_test)])
+        mask &= test_ivar > 0
 
         # 4. scale test_ivar
         # test_ivar must be set here!
@@ -1097,13 +1113,17 @@ class Slam(object):
 
         return self.nmse
 
-    def automask(self, flux, ivar, min_num_pix=0.6, ivar_eps=1e-10):
+    def automask(self, flux=None, ivar=None, min_num_pix=0.6, ivar_eps=1e0):
         if isinstance(min_num_pix, int):
             # absolute value
             pass
         elif isinstance(min_num_pix, float):
             # relative value
             min_num_pix = np.round(self.n_obs * min_num_pix)
+        if flux is None:
+            flux = self.tr_flux
+        if ivar is None:
+            ivar = self.tr_ivar
 
         return (flux > 0) & (ivar > ivar_eps) & \
                (np.sum(self.tr_ivar > ivar_eps, axis=0) > min_num_pix)
@@ -1111,6 +1131,29 @@ class Slam(object):
     # ############## #
     # plotting tools #
     # ############## #
+    @property
+    def correlation_coefs(self):
+
+        if self.ccoef is None:
+            ccoef = np.zeros_like(self.wave, float)
+
+            for i in range(self.n_pix):
+                ind_good = self.tr_mask[:, i]
+                ccoef[i] = np.abs(
+                    np.corrcoef(self.tr_flux[ind_good, i],
+                                self.tr_labels[ind_good, 1])[0, 1])
+            self.ccoef = ccoef
+
+        return self.ccoef
+
+    def plot_correlation_coefs(self, fontsize=20):
+
+        plt.rcParams.update({"font.size": fontsize})
+
+        fig, ax = plt.subplots(1, 1, figsize=(10, 8))
+        plt.plot(self.wave, self.correlation_coefs)
+
+        return fig, ax
 
     def plot_training_performance(self, fontsize=20):
         plt.rcParams.update({"font.size":fontsize})
@@ -1142,6 +1185,192 @@ class Slam(object):
         fig.subplots_adjust(hspace=0)
 
         return fig, axs
+
+    @staticmethod
+    def heal_the_world(flux, ivar, labels=None, mask_conv=(1, 2),
+                       flux_bounds=(1e-3, 1e2), ivar_eps=1e0):
+        """ heal the flux, ivar and label array
+        
+        Parameters
+        ----------
+        flux: 2d numpy.ndarray
+            flux array        
+        ivar: 2d numpy.ndarray
+            ivar array
+        labels: 2d numpy.ndarray
+            label array
+        mask_conv:
+            if not None, convolve mask
+        flux_bounds:
+            bounds of flux
+        ivar_eps:
+            the lowest ivar value allowed
+
+        Returns
+        -------
+
+        """
+        # assert input data are 2-d np.ndarray
+        assert isinstance(flux, np.ndarray) and flux.ndim == 2
+        assert isinstance(ivar, np.ndarray) and ivar.ndim == 2
+        if labels is not None:
+            assert isinstance(labels, np.ndarray) and labels.ndim == 2
+
+        # assert input data shape consistency
+        assert flux.shape == ivar.shape
+        if labels is not None:
+            assert flux.shape[0] == labels.shape[0]
+
+        # to make dataset valid
+        if flux_bounds is not None:
+            ind_flux_in_bounds = (flux > flux_bounds[0]) & (flux < flux_bounds[1])
+            ind_flux_finite = np.isfinite(flux) & np.isfinite(ivar)
+            ind_ivar_valid = ivar > ivar_eps
+            ind_ivar_reset = np.logical_not(ivar == 0.) & np.logical_not(
+                ind_flux_in_bounds & ind_flux_finite & ind_ivar_valid)
+            ind_flux_reset = np.logical_not(ind_flux_finite)
+            # not in bounds, or infinite, or ivar too small
+            sum_flux_reset = np.sum(ind_flux_reset, axis=1)
+            sum_ivar_reset = np.sum(ind_ivar_reset, axis=1)
+            print("=====================================================")
+            print("@Slam.heal_the_world: IVAR of {} spectra need to be reset"
+                  "".format(np.sum(sum_ivar_reset > 0)))
+            print("=====================================================")
+            for i in np.where(sum_ivar_reset > 0)[0]:
+                print("({}, {}), ".format(i, sum_ivar_reset[i]), end="")
+            print("")
+            print("=====================================================")
+            print("")
+            print("=====================================================")
+            print("@Slam.heal_the_world: FLUX of {} spectra need to be reset"
+                  "".format(np.sum(sum_flux_reset > 0)))
+            print("=====================================================")
+            for i in np.where(sum_flux_reset > 0)[0]:
+                print("({}, {}), ".format(i, sum_flux_reset[i]), end="")
+            print("")
+            print("=====================================================")
+
+            flux = np.where(ind_flux_reset, 0., flux)
+            ivar = np.where(ind_ivar_reset, 0., ivar)
+
+        if mask_conv is not None:
+            for i in range(ivar.shape[0]):
+                ivar[i] *= convolve_mask(
+                    ivar[i] > 0, kernel_size_coef=.25,
+                    kernel_size_limit=mask_conv, sink_region=None)
+
+        # if labels are bad
+        if labels is not None:
+            ind_bad_labels = np.any(np.logical_not(np.isfinite(labels)),
+                                    axis=1)
+            n_bad_labels = np.sum(ind_bad_labels)
+            if n_bad_labels > 0:
+                print("=====================================================")
+                print("@Slam.heal_the_world: {} labels are bad".format(
+                    n_bad_labels))
+                print("=====================================================")
+                print(np.where(ind_bad_labels))
+
+        if labels is None:
+            return flux, ivar
+        else:
+            return flux, ivar, labels
+
+    # ############## #
+    # CV tools
+    # ############## #
+
+    def train_test_split(self, test_size=0.1, train_size=0.9, random_state=0):
+        """ separate a test sample from a Slam instance 
+        
+        Parameters
+        ----------
+        test_size: float / int
+            relative / absolute number of test sample size
+        train_size: float / int
+            relative / absolute number of training sample size
+        Returns
+        -------
+        
+        Examples
+        --------
+        >>> ss, test = s.train_test_split(0.1)
+
+        """
+        tr_flux, test_flux, tr_ivar, test_ivar, tr_label, test_labels = \
+            self._train_test_split(self.tr_flux, self.tr_ivar, self.tr_labels,
+                                   test_size=test_size, train_size=train_size,
+                                   random_state=random_state)
+        return Slam(self.wave, tr_flux, tr_ivar, tr_label,
+                    **self.init_kwargs), (test_flux, test_ivar, test_labels)
+
+    @staticmethod
+    def _train_test_split(*arrays, **options):
+        """ Split arrays or matrices into random train and test subsets
+        
+        Quick utility that wraps input validation and
+        ``next(ShuffleSplit().split(X, y))`` and application to input data
+        into a single call for splitting (and optionally subsampling) data in a
+        oneliner.
+        Read more in the :ref:`User Guide <cross_validation>`.
+        Parameters
+        ----------
+        *arrays : sequence of indexables with same length / shape[0]
+            Allowed inputs are lists, numpy arrays, scipy-sparse
+            matrices or pandas dataframes.
+        test_size : float, int, or None (default is None)
+            If float, should be between 0.0 and 1.0 and represent the
+            proportion of the dataset to include in the test split. If
+            int, represents the absolute number of test samples. If None,
+            the value is automatically set to the complement of the train size.
+            If train size is also None, test size is set to 0.25.
+        train_size : float, int, or None (default is None)
+            If float, should be between 0.0 and 1.0 and represent the
+            proportion of the dataset to include in the train split. If
+            int, represents the absolute number of train samples. If None,
+            the value is automatically set to the complement of the test size.
+        random_state : int or RandomState
+            Pseudo-random number generator state used for random sampling.
+        stratify : array-like or None (default is None)
+            If not None, data is split in a stratified fashion, using this as
+            the class labels.
+        Returns
+        -------
+        splitting : list, length=2 * len(arrays)
+            List containing train-test split of inputs.
+            .. versionadded:: 0.16
+                If the input is sparse, the output will be a
+                ``scipy.sparse.csr_matrix``. Else, output type is the same as the
+                input type.
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from sklearn.model_selection import train_test_split
+        >>> X, y = np.arange(10).reshape((5, 2)), range(5)
+        >>> X
+        array([[0, 1],
+               [2, 3],
+               [4, 5],
+               [6, 7],
+               [8, 9]])
+        >>> list(y)
+        [0, 1, 2, 3, 4]
+        >>> X_train, X_test, y_train, y_test = train_test_split(
+        ...     X, y, test_size=0.33, random_state=42)
+        ...
+        >>> X_train
+        array([[4, 5],
+               [0, 1],
+               [6, 7]])
+        >>> y_train
+        [2, 0, 3]
+        >>> X_test
+        array([[2, 3],
+               [8, 9]])
+        >>> y_test
+        [1, 4]
+        """
+        return train_test_split(*arrays, **options)
 
 
 def nmse(svr, X, y, sample_weight=None):

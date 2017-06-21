@@ -210,7 +210,7 @@ def costfun_for_label(X_, svrs, test_flux, test_ivar, mask):
     return res
 
 
-def predict_labels_chi2(tplt_flux, tplt_labels, test_flux, test_ivar,
+def predict_labels_chi2(tplt_flux, tplt_ivar, tplt_labels, test_flux, test_ivar,
                         n_jobs=1, verbose=False):
     """ a quick search for initial values of test_labels for test_flux
 
@@ -228,7 +228,8 @@ def predict_labels_chi2(tplt_flux, tplt_labels, test_flux, test_ivar,
         assert tplt_flux.shape[1] == test_flux.shape[0]
 
         i_min = np.argsort(
-            np.sum((tplt_flux - test_flux) ** 2. * test_ivar, axis=1)
+            np.nanmean((tplt_flux - test_flux) ** 2. * test_ivar * np.where(
+                tplt_ivar > 0, 1., np.nan), axis=1)
         ).flatten()[0]
 
         return tplt_labels[i_min, :]
@@ -237,7 +238,7 @@ def predict_labels_chi2(tplt_flux, tplt_labels, test_flux, test_ivar,
         n_test = test_flux.shape[0]
         results = Parallel(n_jobs=n_jobs, verbose=verbose)(
             delayed(predict_labels_chi2)(
-                tplt_flux, tplt_labels, test_flux[i, :], test_ivar[i, :])
+                tplt_flux, tplt_ivar, tplt_labels, test_flux[i, :], test_ivar[i, :])
             for i in range(n_test)
         )
 
