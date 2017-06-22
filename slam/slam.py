@@ -70,7 +70,6 @@ class Slam(object):
     init_kwargs = {}
     heal_kwargs = {}
 
-
     # SVR result list
     svrs = []
     hyperparams = Table(data=[np.zeros(0)] * 3,
@@ -83,6 +82,9 @@ class Slam(object):
     trained = False
     sample_weight = None
     ind_all_bad = None
+
+    uniform_good = None
+    uniform_ind = None
 
     # ####################### #
     #     Basic functions     #
@@ -1155,7 +1157,7 @@ class Slam(object):
 
         return fig, ax
 
-    def plot_training_performance(self, fontsize=20):
+    def plot_training_performance(self, fontsize=20, mse_hline=None):
         plt.rcParams.update({"font.size":fontsize})
         fig, axs = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
         fig.sca(axs[0])
@@ -1166,7 +1168,9 @@ class Slam(object):
         fig.sca(axs[1])
         plt.plot(self.wave, -self.scores, label='cross validated MSE')
         plt.plot(self.wave, -self.training_nmse(30), label='training MSE')
-        plt.hlines(.25, self.wave[0], self.wave[-1], linestyle='--', color='gray')
+        if mse_hline is not None:
+            plt.hlines(mse_hline, self.wave[0], self.wave[-1], linestyle='--',
+                       color='gray')
         plt.legend(loc=5, framealpha=.3)
 
         fig.sca(axs[2])
@@ -1371,6 +1375,106 @@ class Slam(object):
         [1, 4]
         """
         return train_test_split(*arrays, **options)
+
+    def update(self):
+        """ uodate to the new version """
+        s = Slam(self.wave, self.tr_flux, self.tr_ivar, self.tr_labels, **self.init_kwargs)
+
+        """ This defines Slam class """
+        s.ccoef = self.ccoef
+
+        # SVR result list
+        s.svrs = self.svrs
+        s.hyperparams = self.hyperparams
+
+        s.scores = self.scores
+        s.nmse = self.nmse
+        s.stats_train = self.stats_train
+        s.stats_test = self.stats_test
+
+        s.trained = self.trained
+        s.sample_weight = self.sample_weight
+        s.ind_all_bad = self.ind_all_bad
+        return s
+
+    def uniform(self, bins, n_pick=3, digits=8, ignore_out=False):
+        """ make a uniform sample --> index stored in Slam.uniform_good
+        
+        Parameters
+        ----------
+        bins: list of arrays
+            bins in each dim
+        n_pick: int
+            how many to pick in each bin
+        digits: int
+            digits to form string
+        ignore_out: bool
+            if True, kick stars out of bins
+            if False, raise error if there is any star out of bins 
+            
+        Examples
+        --------
+        >>> s.uniform([np.arange(3000, 6000, 100), np.arange(-1, 5, .2),
+        >>>     np.arange(-5, 1, .1)], n_pick=1, ignore_out=False)
+
+        Returns
+        -------
+        index of selected sub sample
+
+        """
+        try:
+            assert len(bins) == self.n_dim
+        except AssertionError:
+            print(len(bins), self.n_dim, "don't match")
+
+        # initiate arrays
+        self.uniform_good = np.ones((self.n_obs,), bool)
+        self.uniform_ind = np.ones_like(self.tr_labels, int) * np.nan
+
+        # make IDs for bins
+        for i_dim in range(self.n_dim):
+            this_bins = bins[i_dim]
+            for i_bin in range(len(this_bins) - 1):
+                ind = np.logical_and(
+                    self.tr_labels[:, i_dim] > this_bins[i_bin],
+                    self.tr_labels[:, i_dim] < this_bins[i_bin + 1])
+                self.uniform_ind[ind, i_dim] = i_bin
+
+        # check bins covering all stars
+        ind_not_in_bins = np.any(
+            np.logical_not(np.isfinite(self.uniform_ind)),axis=1)
+        if np.sum(ind_not_in_bins) > 0:
+            if ignore_out:
+                print("These stars are out of bins and ignored")
+                print(np.where(ind_not_in_bins)[0])
+                self.uniform_good &= np.logical_not(ind_not_in_bins)
+            else:
+                raise (ValueError("bins not wide enough to cover all stars"))
+
+        # make ID string for bins
+        fmt = "{{:0{}.0f}}".format(digits)
+        uniform_str = []
+        for i_obs in range(self.n_obs):
+            str_ = ""
+            for i_dim in range(self.n_dim):
+                str_ += fmt.format(self.uniform_ind[i_obs, i_dim])
+            uniform_str.append(str_)
+        uniform_str = np.array(uniform_str)
+
+        # unique IDs
+        u_str, u_inverse, u_counts = np.unique(
+            uniform_str, return_inverse=True, return_counts=True)
+
+        # pick stars from these bins
+        ind_bin_need_to_pick = np.where(u_counts > n_pick)[0]
+        for _ in ind_bin_need_to_pick:
+            ind_in_this_bin = np.where(u_inverse == _)[0]
+            np.random.shuffle(ind_in_this_bin)
+            self.uniform_good[ind_in_this_bin[n_pick:]] = False
+
+        print("Slam.uniform: [{}/{}] stars chosen to make a uniform sample!"
+              "".format(np.sum(self.uniform_good), self.n_obs))
+        return self.uniform_good
 
 
 def nmse(svr, X, y, sample_weight=None):
