@@ -3,8 +3,8 @@ from distutils.core import setup
 
 if __name__ == '__main__':
     setup(
-        name='slam',
-        version='0.8.6',
+        name='astroslam',
+        version='0.9.0',
         author='Bo Zhang',
         author_email='bozhang@nao.cas.cn',
         description=('A forward model using SVR to estimate stellar parameters'
