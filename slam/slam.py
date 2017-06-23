@@ -26,10 +26,12 @@ Aims
 from __future__ import print_function
 
 import os
-
+from tempfile import NamedTemporaryFile
+import time
 import matplotlib.pyplot as plt
 import numpy as np
 from astropy.table import Table
+from ipyparallel import Client
 from joblib import load, dump, Parallel, delayed
 from sklearn.model_selection import train_test_split
 
@@ -39,11 +41,19 @@ from .hyperparameter import (summarize_hyperparameters_to_table,
                              hyperparameter_grid_stats)
 from .mcmc import predict_label_mcmc
 from .predict import predict_labels, predict_labels_chi2, predict_spectrum
-from .utils import convolve_mask, uniform
 from .standardization import standardize, standardize_ivar
 from .train import train_multi_pixels, train_single_pixel
+from .utils import convolve_mask, uniform, getsize, sizeof
 
 __all__ = ['Slam']
+
+ipc_import_lib_str = """
+import os
+import numpy as np
+from slam.slam import Slam
+from joblib import Parallel, delayed, dump, load
+from astropy.table import Table
+"""
 
 
 class Slam(object):
@@ -85,6 +95,8 @@ class Slam(object):
 
     uniform_dict = None
     uniform_picked = None
+
+    _total_size = 0
 
     # ####################### #
     #     Basic functions     #
@@ -188,6 +200,15 @@ class Slam(object):
 
             # update dimensions
             self.__update_dims__()
+
+    @property
+    def total_size(self):
+        self._total_size = getsize(self)
+        return self._total_size
+
+    # this is slow but gets you the size of every attribute
+    def size(self, unit='mb', verbose=False, key_removed=["size", "size_total_mb"]):
+        return sizeof(self, unit=unit, verbose=verbose, key_removed=key_removed)
 
     @staticmethod
     def init_from_keenan(k):
@@ -625,8 +646,114 @@ class Slam(object):
 
         return X_quick
 
+    def predict_labels_ipc(self, X_init, test_flux, test_ivar,
+                           profile="default", fp=None, fp_remove=False,
+                           delete=True, return_dv=False, *args, **kwargs):
+        """ parallel using ipcluster, make sure there is an ipcluster available
+        
+        Parameters
+        ----------
+        X0:
+            initial guess of parameters
+        test_flux:
+            flux array
+        test_ivar:
+            ivar array
+        profile:
+            ipcluster profile
+        fp:
+            if None, load
+            file path which Slam saves to.
+        fp_remove:
+            if True, remove dump
+        delete:
+            if True, delete Slam instance in engines
+        return_dv:
+            if True, return dv
+        args, kwargs
+            will be passed to Slam.predict_labels_multi()
+
+        Returns
+        -------
+
+        """
+        # timing
+        time1 = time.time()
+
+        # force n_jobs = 1 in engines
+        kwargs["n_jobs"] = 1
+
+        # initiate ipcluster
+        rc = Client(profile=profile)
+
+        # print ipcluster information
+        n_proc = len(rc.ids)
+        print("===================================================")
+        print("@Slam: ipcluster[{}, n_proc={}]".format(profile, n_proc))
+        print("---------------------------------------------------")
+        dv = rc[:]
+
+        # import modules in ipcluster
+        dv.execute(ipc_import_lib_str).get()
+
+        # print host information
+        dv.execute("host_names = os.uname()[1]").get()
+        u_host_names, u_counts = np.unique(
+            dv["host_names"], return_counts=True)
+        for i in range(len(u_counts)):
+            print("host: {} x {}".format(u_host_names[i], u_counts[i]))
+        print("===================================================")
+
+        # estimate size of Slam
+        print("@Slam: size of me is about {} MB ".format(
+            self.total_size / 1024 ** 2))
+
+        # save Slam instance
+        if fp is None:
+            temp = NamedTemporaryFile()
+            fp = temp.name
+            print("@Slam: saving Slam instance to {} ...".format(fp))
+            self.save_dump(fp, overwrite=True)
+        else:
+            # do not remove fp if load from a specified dump file
+            fp_remove = False
+
+        # load Slam instance
+        print("@Slam: loading Slam instance from {} ...".format(fp))
+        dv.execute("s = Slam.load_dump('{}')".format(fp)).get()
+
+        # scatter data
+        print("@Slam: scattering & pushing data to engines ...")
+        dv.scatter("X_init", X_init)
+        dv.scatter("test_flux", test_flux)
+        dv.scatter("test_ivar", test_ivar)
+        dv.push({"args": args, "kwargs": kwargs})
+        print("@Slam: engines are working ...")
+        r = dv.execute("X_pred = s.predict_labels_multi("
+                       "X_init, test_flux, test_ivar, *args, **kwargs)")
+        print("@Slam: take a cup of coffee and have a break ...")
+        print("@Slam: DO NOT INTERRUPT! Or you have to RESTART ipcluster!")
+        r.wait()
+        print("@Slam: gathering results ...")
+        X_pred = dv.gather("X_pred").get()
+
+        time2 = time.time()
+        print("@Slam: it took so long ({} sec)".format(time2-time1))
+
+        # remove saved dump file
+        if fp_remove:
+            os.remove(fp)
+
+        if delete:
+            dv.execute("del(s)")
+
+        if return_dv:
+            return X_pred, dv
+        else:
+            return X_pred
+
     # in this method, do not use scaler defined in predict_labels()
-    def predict_labels_multi(self, X0, test_flux, test_ivar=None, mask="auto",
+    def predict_labels_multi(self, X0, test_flux, test_ivar=None, mask=None,
                              model_ivar=None, flux_eps=None, ivar_eps=1e0,
                              flux_scaler=True, ivar_scaler=True,
                              labels_scaler=True, n_jobs=1, verbose=False,

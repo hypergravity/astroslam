@@ -22,8 +22,10 @@ Aims
 - utils for processing spectra
 
 """
-
 import sys
+from collections import OrderedDict, Set, Mapping, deque
+from numbers import Number
+
 import numpy as np
 
 
@@ -194,19 +196,64 @@ unit_scale_dict = dict(
 )
 
 
-def sizeof(obj, unit='b', verbose=False):
+# deprecated
+def sizeof(obj, unit='mb', verbose=False, key_removed=None):
 
-    attr_list = dir(obj)
-    size_list = [sys.getsizeof(obj.__getattribute__(_)) for _ in attr_list]
-
-    if verbose:
-        for i_attr in range(len(attr_list)):
-            print("{} \t {}".format(attr_list[i_attr], size_list[i_attr]))
-
+    # get scale for unit
     try:
         scale = unit_scale_dict[unit]
     except KeyError:
         print("@sizeof: unit should be in ", unit_scale_dict.keys())
 
-    return np.sum(size_list) * scale
+    # get size
+    v_dict = OrderedDict()
+    for _ in dir(obj):
+        v_dict[_] = getsize(obj.__getattribute__(_))
+
+    v_dict['_total'] = np.sum([v_dict[_] for _ in v_dict.keys()])
+    for k in v_dict.keys():
+        v_dict[k] = np.int(scale * v_dict[k])
+
+    v_dict['_unit'] = unit
+
+    if verbose:
+        print(v_dict)
+
+    return v_dict
+
+
+# ########################################################################### #
+# adapted from https://stackoverflow.com/questions/449560/how-do-i-determine-th
+# e-size-of-an-object-in-python
+# ########################################################################### #
+
+# try: # Python 2
+#     zero_depth_bases = (basestring, Number, xrange, bytearray)
+#     iteritems = 'iteritems'
+# except NameError: # Python 3
+zero_depth_bases = (str, bytes, Number, range, bytearray)
+iteritems = 'items'
+
+
+def getsize(obj_0):
+    """Recursively iterate to sum size of object & members."""
+    def inner(obj, _seen_ids = set()):
+        obj_id = id(obj)
+        if obj_id in _seen_ids:
+            return 0
+        _seen_ids.add(obj_id)
+        size = sys.getsizeof(obj)
+        if isinstance(obj, zero_depth_bases):
+            pass # bypass remaining control flow and return
+        elif isinstance(obj, (tuple, list, Set, deque)):
+            size += sum(inner(i) for i in obj)
+        elif isinstance(obj, Mapping) or hasattr(obj, iteritems):
+            size += sum(inner(k) + inner(v) for k, v in getattr(obj, iteritems)())
+        # Check for custom object instances - may subclass above too
+        if hasattr(obj, '__dict__'):
+            size += inner(vars(obj))
+        if hasattr(obj, '__slots__'): # can have __slots__ with __dict__
+            size += sum(inner(getattr(obj, s)) for s in obj.__slots__ if hasattr(obj, s))
+        return size
+    return inner(obj_0)
 
