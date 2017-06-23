@@ -39,7 +39,7 @@ from .hyperparameter import (summarize_hyperparameters_to_table,
                              hyperparameter_grid_stats)
 from .mcmc import predict_label_mcmc
 from .predict import predict_labels, predict_labels_chi2, predict_spectrum
-from .specutils import convolve_mask
+from .utils import convolve_mask, uniform
 from .standardization import standardize, standardize_ivar
 from .train import train_multi_pixels, train_single_pixel
 
@@ -83,8 +83,8 @@ class Slam(object):
     sample_weight = None
     ind_all_bad = None
 
-    uniform_good = None
-    uniform_ind = None
+    uniform_dict = None
+    uniform_picked = None
 
     # ####################### #
     #     Basic functions     #
@@ -1397,7 +1397,7 @@ class Slam(object):
         s.ind_all_bad = self.ind_all_bad
         return s
 
-    def uniform(self, bins, n_pick=3, digits=8, ignore_out=False):
+    def uniform(self, bins, n_pick=3, ignore_out=False, digits=8):
         """ make a uniform sample --> index stored in Slam.uniform_good
         
         Parameters
@@ -1422,59 +1422,10 @@ class Slam(object):
         index of selected sub sample
 
         """
-        try:
-            assert len(bins) == self.n_dim
-        except AssertionError:
-            print(len(bins), self.n_dim, "don't match")
-
-        # initiate arrays
-        self.uniform_good = np.ones((self.n_obs,), bool)
-        self.uniform_ind = np.ones_like(self.tr_labels, int) * np.nan
-
-        # make IDs for bins
-        for i_dim in range(self.n_dim):
-            this_bins = bins[i_dim]
-            for i_bin in range(len(this_bins) - 1):
-                ind = np.logical_and(
-                    self.tr_labels[:, i_dim] > this_bins[i_bin],
-                    self.tr_labels[:, i_dim] < this_bins[i_bin + 1])
-                self.uniform_ind[ind, i_dim] = i_bin
-
-        # check bins covering all stars
-        ind_not_in_bins = np.any(
-            np.logical_not(np.isfinite(self.uniform_ind)),axis=1)
-        if np.sum(ind_not_in_bins) > 0:
-            if ignore_out:
-                print("These stars are out of bins and ignored")
-                print(np.where(ind_not_in_bins)[0])
-                self.uniform_good &= np.logical_not(ind_not_in_bins)
-            else:
-                raise (ValueError("bins not wide enough to cover all stars"))
-
-        # make ID string for bins
-        fmt = "{{:0{}.0f}}".format(digits)
-        uniform_str = []
-        for i_obs in range(self.n_obs):
-            str_ = ""
-            for i_dim in range(self.n_dim):
-                str_ += fmt.format(self.uniform_ind[i_obs, i_dim])
-            uniform_str.append(str_)
-        uniform_str = np.array(uniform_str)
-
-        # unique IDs
-        u_str, u_inverse, u_counts = np.unique(
-            uniform_str, return_inverse=True, return_counts=True)
-
-        # pick stars from these bins
-        ind_bin_need_to_pick = np.where(u_counts > n_pick)[0]
-        for _ in ind_bin_need_to_pick:
-            ind_in_this_bin = np.where(u_inverse == _)[0]
-            np.random.shuffle(ind_in_this_bin)
-            self.uniform_good[ind_in_this_bin[n_pick:]] = False
-
-        print("Slam.uniform: [{}/{}] stars chosen to make a uniform sample!"
-              "".format(np.sum(self.uniform_good), self.n_obs))
-        return self.uniform_good
+        self.uniform_dict = uniform(self.tr_labels, bins=bins, n_pick=n_pick,
+                                    digits=digits, ignore_out=ignore_out)
+        self.uniform_picked = self.uniform_dict["uniform_good"]
+        return self.uniform_picked
 
 
 def nmse(svr, X, y, sample_weight=None):
