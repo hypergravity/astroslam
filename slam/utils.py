@@ -146,7 +146,7 @@ def uniform(tr_labels, bins, n_pick=3, ignore_out=False, digits=8):
     if np.sum(ind_not_in_bins) > 0:
         if ignore_out:
             print("@utils.uniform: These stars are out of bins and ignored")
-            print(np.where(ind_not_in_bins)[0])
+            print("i = ", np.where(ind_not_in_bins)[0])
             uniform_good &= np.logical_not(ind_not_in_bins)
         else:
             raise (ValueError(
@@ -177,6 +177,7 @@ def uniform(tr_labels, bins, n_pick=3, ignore_out=False, digits=8):
           "".format(np.sum(uniform_good), n_obs))
 
     return dict(uniform_picked=uniform_good,
+                uniform_unpicked=np.logical_not(uniform_good),
                 uniform_ind=uniform_ind,
                 uniform_str=uniform_str,
                 uniform_bins=bins,

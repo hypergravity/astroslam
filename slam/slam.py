@@ -265,19 +265,28 @@ class Slam(object):
 
     def __repr__(self):
         repr_strs = [
+            "======================================",
             "Slam instance:",
+            "======================================",
             "tr_flux............: ( %s x %s )" % self.tr_flux.shape,
             "tr_ivar............: ( %s x %s )" % self.tr_ivar.shape,
             "tr_labels..........: ( %s x %s )" % self.tr_labels.shape,
-
+            "--------------------------------------",
             "tr_flux_scaled.....: ( %s x %s )" % self.tr_flux_scaled.shape,
             "tr_ivar_scaled.....: ( %s x %s )" % self.tr_ivar_scaled.shape,
             "tr_labels_scaled...: ( %s x %s )" % self.tr_labels_scaled.shape,
-
+            "--------------------------------------",
+            "scale..............: {}".format(self.init_kwargs["scale"]),
+            "robust.............: {}".format(self.init_kwargs["robust"]),
+            "mask_conv..........: {}".format(self.init_kwargs["mask_conv"]),
+            "flux_bounds........: {}".format(self.init_kwargs["flux_bounds"]),
+            "ivar_eps...........: {}".format(self.init_kwargs["ivar_eps"]),
+            "--------------------------------------",
             "svrs...............: list[%s]" % len(self.svrs),
             "scores.............: list[%s]" % len(self.scores),
             "hyper-parameters...: Table[length=%s]" % len(self.hyperparams),
             "trained............: %s" % self.trained,
+            "======================================",
         ]
         return '\n'.join(repr_strs)
 
@@ -1284,6 +1293,21 @@ class Slam(object):
     # CV tools
     # ############## #
 
+    def sub_slam(self, ind_sub):
+        """  return a Slam instance initiated with a subset of training data
+        
+        Parameters
+        ----------
+        ind_sub: 1d array
+            index array of subset
+
+        Returns
+        -------
+
+        """
+        return Slam(self.wave, self.tr_flux[ind_sub], self.tr_ivar[ind_sub],
+                    self.tr_labels[ind_sub], **self.init_kwargs)
+
     def train_test_split(self, test_size=0.1, train_size=0.9, random_state=0):
         """ separate a test sample from a Slam instance 
         
@@ -1424,7 +1448,7 @@ class Slam(object):
         """
         self.uniform_dict = uniform(self.tr_labels, bins=bins, n_pick=n_pick,
                                     digits=digits, ignore_out=ignore_out)
-        self.uniform_picked = self.uniform_dict["uniform_good"]
+        self.uniform_picked = self.uniform_dict["uniform_picked"]
         return self.uniform_picked
 
 
