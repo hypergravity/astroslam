@@ -23,6 +23,7 @@ Aims
 
 """
 
+import sys
 import numpy as np
 
 
@@ -184,3 +185,28 @@ def uniform(tr_labels, bins, n_pick=3, ignore_out=False, digits=8):
                 n_pick=n_pick,
                 digits=digits,
                 ignore_out=ignore_out)
+
+unit_scale_dict = dict(
+    b=1.,
+    kb=1024**-1,
+    mb=1024**-2,
+    gb=1024**-3,
+)
+
+
+def sizeof(obj, unit='b', verbose=False):
+
+    attr_list = dir(obj)
+    size_list = [sys.getsizeof(obj.__getattribute__(_)) for _ in attr_list]
+
+    if verbose:
+        for i_attr in range(len(attr_list)):
+            print("{} \t {}".format(attr_list[i_attr], size_list[i_attr]))
+
+    try:
+        scale = unit_scale_dict[unit]
+    except KeyError:
+        print("@sizeof: unit should be in ", unit_scale_dict.keys())
+
+    return np.sum(size_list) * scale
+
