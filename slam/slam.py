@@ -481,13 +481,16 @@ class Slam(object):
 
         return svr, score
 
-    def train_pixels(self, sample_weight_scheme='bool',
+    def train_pixels(self, profile=None, sample_weight_scheme='bool',
                      cv=3, n_jobs=10, method='simple', verbose=10,
                      **kwargs):
         """ train pixels usig SVR
 
         Parameters
         ----------
+        profile: str | None
+            if str, use that ipcluster profile
+            if None, simply parallel in SMP
         sample_weight_scheme: string
             sample weight scheme for training {'alleven', 'bool', 'ivar'}
         cv: int
@@ -536,22 +539,98 @@ class Slam(object):
         self.sample_weight = sample_weight
 
         # training
-        results = train_multi_pixels(self.tr_labels_scaled,
-                                     [y for y in self.tr_flux_scaled.T],
-                                     [sw_ for sw_ in self.sample_weight.T],
-                                     cv=cv,
-                                     method=method,
-                                     n_jobs=n_jobs,
-                                     verbose=verbose,
-                                     **kwargs)
+        if profile is None:
+            # paprallel in SMP
+            results = train_multi_pixels(
+                self.tr_labels_scaled,
+                [y for y in self.tr_flux_scaled.T],
+                [sw_ for sw_ in self.sample_weight.T],
+                cv=cv,
+                method=method,
+                n_jobs=n_jobs,
+                verbose=verbose,
+                **kwargs)
 
-        # clear & store new results
-        self.svrs = []
-        self.scores = []
-        for svr, score in results:
-            self.svrs.append(svr)
-            self.scores.append(score)
-        self.scores = np.array(self.scores)
+            # clear & store new results
+            self.svrs = []
+            self.scores = []
+            for svr, score in results:
+                self.svrs.append(svr)
+                self.scores.append(score)
+            self.scores = np.array(self.scores)
+
+        else:
+            # parallel in ipcluster
+            rc = Client(profile=profile)
+            dv = rc[:]
+            print("@Slam: launching ipcluster [n_proc = {}]"
+                  "".format(len(rc.ids)))
+
+            kwargs["cv"] = cv
+            kwargs["method"] = method
+            kwargs["n_jobs"] = 1
+            kwargs["verbose"] = verbose
+
+            # dump training data
+            f = NamedTemporaryFile()
+            dump_source = f.name
+            print("@Slam: dumping training data to {} ...".format(dump_source))
+            dump((self.tr_labels_scaled, self.tr_flux_scaled,
+                  self.sample_weight, kwargs), dump_source)
+
+            # load training data in engines
+            dv.execute("import os")
+            dv.execute("import tempfile")
+            dv.execute("from joblib import dump, load")
+            dv.execute("from slam.train import train_multi_pixels")
+
+            dv.scatter("ind", np.arange(self.n_pix))
+            dv.push({"dump_source": dump_source})
+            print("@Slam: loading training data in engines ...")
+            dv.execute("(tr_labels_scaled, tr_flux_scaled, sample_weight,"
+                       " kwargs) = load(dump_source)")
+            print("@Slam: training in engines ...")
+            print("@Slam: take a cup of coffee and have a break ...")
+            print("@Slam: DO NOT INTERRUPT! Or you have to RESTART ipcluster!")
+            dv.execute("results = train_multi_pixels(tr_labels_scaled,"
+                       "[y for y in tr_flux_scaled[:, ind].T],"
+                       "[sw_ for sw_ in sample_weight[:, ind].T],"
+                       "**kwargs)")
+
+            # dump training results in engines
+            dv.execute("f = tempfile.NamedTemporaryFile()")
+            dv.execute("dump_path = f.name")
+            dv.execute("dump((results, ind), dump_path)")
+
+            # initiate svrs and scores
+            svrs = [None for _ in range(self.n_pix)]
+            scores = np.zeros((self.n_pix,), float)
+
+            # gather results
+            dump_paths = dv.gather("dump_path").get()
+            print("@Slam: gathering results ...")
+            for dump_path in dump_paths:
+                results, ind = load(dump_path)
+                for i in range(len(ind)):
+                    svrs[ind[i]], scores[ind[i]] = results[i]
+
+            # remove dump files
+            print("@Slam: removing dump source {} ...".format(dump_source))
+            # os.remove(dump_source) # it's deleted automatically
+            print("@Slam: removing dump files ...")
+            dv.execute("os.remove(dump_path)")
+
+            # clear variables in engines
+            print("@Slam: clear variables in engines ...")
+            dv.execute("del(results, tr_labels_scaled, tr_flux_scaled, "
+                       "sample_weight)")
+
+            # finishing
+            print("@Slam: training finished!")
+
+            # store new results
+            self.svrs = svrs
+            self.scores = scores
 
         # update hyper-parameters
         self.__update_hyperparams__()
