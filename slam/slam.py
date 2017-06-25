@@ -44,6 +44,7 @@ from .predict import predict_labels, predict_labels_chi2, predict_spectrum
 from .standardization import standardize, standardize_ivar
 from .train import train_multi_pixels, train_single_pixel
 from .utils import convolve_mask, uniform, getsize, sizeof
+from .parallel import launch_ipcluster_dv, reset_dv, print_time_cost
 
 __all__ = ['Slam']
 
@@ -481,9 +482,9 @@ class Slam(object):
 
         return svr, score
 
-    def train_pixels(self, profile=None, sample_weight_scheme='bool',
-                     cv=3, n_jobs=10, method='simple', verbose=10,
-                     **kwargs):
+    def train_pixels(self, profile=None, targets="all", temp_dir=None,
+                     sample_weight_scheme='bool', cv=3, method='simple',
+                     n_jobs=10, verbose=10, **kwargs):
         """ train pixels usig SVR
 
         Parameters
@@ -491,16 +492,21 @@ class Slam(object):
         profile: str | None
             if str, use that ipcluster profile
             if None, simply parallel in SMP
+        targets: list | slice | int | "all" 
+            the targets of remote cluster
+        temp_dir: str
+            the directory to save temp files
+            make sure it's shared between controllers and engines
         sample_weight_scheme: string
             sample weight scheme for training {'alleven', 'bool', 'ivar'}
         cv: int
             if cv>1, cv-fold Cross-Validation will be performed
-        n_jobs: int
-            number of jobs that will be launched simultaneously
         method: {'simple' | 'grid' | 'rand'}
             simple: directly use user-defined hyper-parameters
             grid: grid search for optimized hyper-parameters
             rand: randomized search for optimized hyper-parameters
+        n_jobs: int
+            number of jobs that will be launched simultaneously
         verbose:
             verbose level
         **kwargs:
@@ -560,32 +566,43 @@ class Slam(object):
             self.scores = np.array(self.scores)
 
         else:
+            time1 = time.time()
+
             # parallel in ipcluster
-            rc = Client(profile=profile)
-            dv = rc[:]
-            print("@Slam: launching ipcluster [n_proc = {}]"
-                  "".format(len(rc.ids)))
+            dv = launch_ipcluster_dv(profile=profile, targets=targets,
+                                     block=True)
 
             kwargs["cv"] = cv
             kwargs["method"] = method
             kwargs["n_jobs"] = 1
             kwargs["verbose"] = verbose
 
+            # assert temp_dir exists
+            if temp_dir is None:
+                print("@Slam: make sure engines and controllers share"
+                      " [/tmp]!)")
+            else:
+                try:
+                    assert os.path.exists(temp_dir)
+                except AssertionError as ae:
+                    print("@Slam: [{}] doen't exist!".format(temp_dir))
+                    raise ae
+
             # dump training data
-            f = NamedTemporaryFile()
-            dump_source = f.name
+            with NamedTemporaryFile(dir=temp_dir) as f:
+                dump_source = f.name
             print("@Slam: dumping training data to {} ...".format(dump_source))
             dump((self.tr_labels_scaled, self.tr_flux_scaled,
                   self.sample_weight, kwargs), dump_source)
 
             # load training data in engines
-            dv.execute("import os")
-            dv.execute("import tempfile")
-            dv.execute("from joblib import dump, load")
-            dv.execute("from slam.train import train_multi_pixels")
+            dv.execute("import os\n"
+                       "import tempfile\n"
+                       "from joblib import dump, load\n"
+                       "from slam.train import train_multi_pixels")
 
             dv.scatter("ind", np.arange(self.n_pix))
-            dv.push({"dump_source": dump_source})
+            dv.push({"dump_source": dump_source, "temp_dir": temp_dir})
             print("@Slam: loading training data in engines ...")
             dv.execute("(tr_labels_scaled, tr_flux_scaled, sample_weight,"
                        " kwargs) = load(dump_source)")
@@ -598,8 +615,9 @@ class Slam(object):
                        "**kwargs)")
 
             # dump training results in engines
-            dv.execute("f = tempfile.NamedTemporaryFile()")
+            dv.execute("f = tempfile.NamedTemporaryFile(dir=temp_dir)")
             dv.execute("dump_path = f.name")
+            dv.execute("f.close()")
             dv.execute("dump((results, ind), dump_path)")
 
             # initiate svrs and scores
@@ -607,7 +625,7 @@ class Slam(object):
             scores = np.zeros((self.n_pix,), float)
 
             # gather results
-            dump_paths = dv.gather("dump_path").get()
+            dump_paths = dv.gather("dump_path")
             print("@Slam: gathering results ...")
             for dump_path in dump_paths:
                 results, ind = load(dump_path)
@@ -616,7 +634,7 @@ class Slam(object):
 
             # remove dump files
             print("@Slam: removing dump source {} ...".format(dump_source))
-            # os.remove(dump_source) # it's deleted automatically
+            os.remove(dump_source)
             print("@Slam: removing dump files ...")
             dv.execute("os.remove(dump_path)")
 
@@ -625,12 +643,15 @@ class Slam(object):
             dv.execute("del(results, tr_labels_scaled, tr_flux_scaled, "
                        "sample_weight)")
 
-            # finishing
-            print("@Slam: training finished!")
-
             # store new results
             self.svrs = svrs
             self.scores = scores
+
+            # finishing
+            time2 = time.time()
+            print("@Slam: it took so long [{}] ..."
+                  "".format(print_time_cost(time2 - time1)))
+            print("@Slam: training finished!")
 
         # update hyper-parameters
         self.__update_hyperparams__()
@@ -702,37 +723,82 @@ class Slam(object):
     def predict_labels_quick(self, test_flux, test_ivar,
                              tplt_flux=None, tplt_ivar=None,
                              tplt_labels=None, n_sparse=1,
+                             profile=None, targets="all", temp_dir="/tmp",
                              n_jobs=1, verbose=False):
         """ a quick chi2 search for labels """
 
         test_flux, test_ivar = self.heal_the_world(
             test_flux, test_ivar, **self.heal_kwargs)
 
-        if tplt_flux is None and tplt_labels is None and tplt_ivar is None:
-            # use default tplt_flux & tplt_labels
-            X_quick = predict_labels_chi2(self.tr_flux[::n_sparse, :],
-                                          self.tr_ivar[::n_sparse, :],
-                                          self.tr_labels[::n_sparse, :],
-                                          test_flux, test_ivar,
-                                          n_jobs=n_jobs, verbose=verbose)
+        if profile is None:
+            if tplt_flux is None and tplt_labels is None and tplt_ivar is None:
+                # use default tplt_flux & tplt_labels
+                X_quick = predict_labels_chi2(self.tr_flux[::n_sparse, :],
+                                              self.tr_ivar[::n_sparse, :],
+                                              self.tr_labels[::n_sparse, :],
+                                              test_flux, test_ivar,
+                                              n_jobs=n_jobs, verbose=verbose)
+            else:
+                # use user-defined tplt_flux & tplt_labels
+                X_quick = predict_labels_chi2(tplt_flux[::n_sparse, :],
+                                              tplt_ivar[::n_sparse, :],
+                                              tplt_labels[::n_sparse, :],
+                                              test_flux, test_ivar,
+                                              n_jobs=n_jobs, verbose=verbose)
         else:
-            # use user-defined tplt_flux & tplt_labels
-            X_quick = predict_labels_chi2(tplt_flux[::n_sparse, :],
-                                          tplt_ivar[::n_sparse, :],
-                                          tplt_labels[::n_sparse, :],
-                                          test_flux, test_ivar,
-                                          n_jobs=n_jobs, verbose=verbose)
+            # initiate ipcluster
+            dv = launch_ipcluster_dv(profile=profile, targets=targets,
+                                     block=True)
+
+            # dump data
+            with NamedTemporaryFile(dir=temp_dir) as f:
+                dump_path = f.name
+            if tplt_flux is None and tplt_labels is None and tplt_ivar is None:
+                print("@Slam: dumping data to {} ... ".format(dump_path))
+                dump((self.tr_flux[::n_sparse, :], self.tr_ivar[::n_sparse, :],
+                      self.tr_labels[::n_sparse, :], test_flux, test_ivar),
+                     dump_path)
+            else:
+                print("@Slam: dumping data to {} ... ".format(dump_path))
+                dump((tplt_flux[::n_sparse, :], tplt_ivar[::n_sparse, :],
+                      tplt_labels[::n_sparse, :], test_flux, test_ivar,),
+                     dump_path)
+
+            # push data
+            dv.push({"dump_path": dump_path})
+            dv.execute("from slam.predict import predict_labels_chi2")
+            dv.execute("from joblib import load, dump")
+            print("@Slam: loading data in engines ...")
+            dv.execute("tplt_flux, tplt_ivar, tplt_labels, test_flux, "
+                       "test_ivar = load(dump_path)")
+            dv.scatter("ind", np.arange(test_flux.shape[0], dtype=int))
+
+            # predict labels
+            print("@Slam: engines are working ...")
+            print("@Slam: take a cup of coffee and have a break ...")
+            print("@Slam: DO NOT INTERRUPT! Or you have to RESTART ipcluster!")
+            dv.execute("X_quick = predict_labels_chi2(tplt_flux, tplt_ivar, "
+                       "tplt_labels, test_flux[ind], test_ivar[ind], "
+                       "n_jobs=1, verbose=10)")
+
+            # gather data
+            print("@Slam: gathering data ...")
+            X_quick = dv.gather("X_quick")
+
+            # remove dump file
+            print("@Slam: removing dump file {} ... ".format(dump_path))
+            os.remove(dump_path)
 
         return X_quick
 
-    def predict_labels_ipc(self, X_init, test_flux, test_ivar,
-                           profile="default", fp=None, fp_remove=False,
-                           delete=True, return_dv=False, *args, **kwargs):
+    def predict_labels_ipc(self, X_init, test_flux, test_ivar, mask=None,
+                           profile="default", targets="all", temp_dir=None,
+                           reset=True, *args, **kwargs):
         """ parallel using ipcluster, make sure there is an ipcluster available
         
         Parameters
         ----------
-        X0:
+        X_init:
             initial guess of parameters
         test_flux:
             flux array
@@ -740,15 +806,12 @@ class Slam(object):
             ivar array
         profile:
             ipcluster profile
-        fp:
-            if None, load
-            file path which Slam saves to.
-        fp_remove:
-            if True, remove dump
-        delete:
-            if True, delete Slam instance in engines
-        return_dv:
-            if True, return dv
+        targets:
+            the targets of remote cluster
+        temp_dir:
+            temp file directory
+        reset
+            if True, reset engines
         args, kwargs
             will be passed to Slam.predict_labels_multi()
 
@@ -756,6 +819,7 @@ class Slam(object):
         -------
 
         """
+
         # timing
         time1 = time.time()
 
@@ -763,73 +827,57 @@ class Slam(object):
         kwargs["n_jobs"] = 1
 
         # initiate ipcluster
-        rc = Client(profile=profile)
-
-        # print ipcluster information
-        n_proc = len(rc.ids)
-        print("===================================================")
-        print("@Slam: ipcluster[{}, n_proc={}]".format(profile, n_proc))
-        print("---------------------------------------------------")
-        dv = rc[:]
+        dv = launch_ipcluster_dv(profile=profile, targets=targets, block=True,
+                                 max_engines=test_flux.shape[0])
 
         # import modules in ipcluster
-        dv.execute(ipc_import_lib_str).get()
-
-        # print host information
-        dv.execute("host_names = os.uname()[1]").get()
-        u_host_names, u_counts = np.unique(
-            dv["host_names"], return_counts=True)
-        for i in range(len(u_counts)):
-            print("host: {} x {}".format(u_host_names[i], u_counts[i]))
-        print("===================================================")
+        dv.execute("import os\n"
+                   "import numpy as np\n"
+                   "from slam.slam import Slam\n"
+                   "from joblib import Parallel, delayed, dump, load\n")
 
         # estimate size of Slam
         print("@Slam: size of me is about {} MB ".format(
             self.total_size / 1024 ** 2))
 
         # save Slam instance
-        if fp is None:
-            temp = NamedTemporaryFile()
-            fp = temp.name
-            print("@Slam: saving Slam instance to {} ...".format(fp))
-            self.save_dump(fp, overwrite=True)
-        else:
-            # do not remove fp if load from a specified dump file
-            fp_remove = False
+        with NamedTemporaryFile(dir=temp_dir) as f:
+            fp = f.name
+        print("@Slam: saving Slam instance to {} ...".format(fp))
+        self.save_dump(fp, overwrite=True)
 
         # load Slam instance
         print("@Slam: loading Slam instance from {} ...".format(fp))
-        dv.execute("s = Slam.load_dump('{}')".format(fp)).get()
+        dv.execute("s = Slam.load_dump('{}')".format(fp))
 
         # scatter data
         print("@Slam: scattering & pushing data to engines ...")
         dv.scatter("X_init", X_init)
         dv.scatter("test_flux", test_flux)
         dv.scatter("test_ivar", test_ivar)
+        if mask is None:
+            dv.push({"mask": mask})
+        elif mask.shape == test_flux.shape:
+            dv.scatter("mask", mask)
+        else:
+            dv.push({"mask": mask})
         dv.push({"args": args, "kwargs": kwargs})
         print("@Slam: engines are working ...")
-        r = dv.execute("X_pred = s.predict_labels_multi("
-                       "X_init, test_flux, test_ivar, *args, **kwargs)")
+        dv.execute("X_pred = s.predict_labels_multi("
+                   "X_init, test_flux, test_ivar, *args, **kwargs)")
         print("@Slam: take a cup of coffee and have a break ...")
         print("@Slam: DO NOT INTERRUPT! Or you have to RESTART ipcluster!")
-        r.wait()
         print("@Slam: gathering results ...")
-        X_pred = dv.gather("X_pred").get()
+        X_pred = dv.gather("X_pred")
 
         time2 = time.time()
-        print("@Slam: it took so long ({} sec)".format(time2-time1))
+        print("@Slam: it took so long [{}] ..."
+              "".format(print_time_cost(time2 - time1)))
 
-        # remove saved dump file
-        if fp_remove:
-            os.remove(fp)
+        if reset:
+            reset_dv(dv)
 
-        if delete:
-            dv.execute("del(s)")
-
-        if return_dv:
-            return X_pred, dv
-        else:
-            return X_pred
+        return X_pred
 
     # in this method, do not use scaler defined in predict_labels()
     def predict_labels_multi(self, X0, test_flux, test_ivar=None, mask=None,
@@ -873,6 +921,12 @@ class Slam(object):
         ** all input should be 2D array or sequential **
 
         """
+        if "profile" in kwargs.keys():
+            if kwargs["profile"] is None:
+                kwargs.pop("profile")
+            else:
+                raise AssertionError(
+                    "@Slam: use Slam.predict_labels_ipc instead!")
 
         test_flux, test_ivar = self.heal_the_world(
             test_flux, test_ivar, **self.heal_kwargs)
@@ -992,14 +1046,17 @@ class Slam(object):
         return X_pred
 
     # in this method, do not use scaler defined in predict_labels()
-    def predict_labels_mcmc(self, X0, test_flux, test_ivar=None, mask=None,
-                            flux_eps=None, flux_scaler=True, ivar_scaler=True,
+    def predict_labels_mcmc(self, X0, test_flux, test_ivar=None,
+                            model_ivar=None, mask=None,
+                            flux_eps=None, ivar_eps=1e0,
+                            flux_scaler=True, ivar_scaler=True,
                             labels_scaler=True, n_jobs=1, verbose=False,
                             X_lb=None, X_ub=None,
                             n_walkers=10, n_burnin=200, n_run=500, threads=1,
                             return_chain=False, mcmc_run_max_iter=3, mcc=0.4,
                             prompts=None,
-                            *args, **kwargs):
+                            profile="default", targets="all", temp_dir=None,
+                            **kwargs):
         """ predict labels for a given test spectrum (multiple)
 
         Parameters
@@ -1030,6 +1087,10 @@ class Slam(object):
         ** all input should be 2D array or sequential **
 
         """
+
+        test_flux, test_ivar = self.heal_the_world(
+            test_flux, test_ivar, **self.heal_kwargs)
+
         # 0. determine n_test
         n_test = test_flux.shape[0]
 
@@ -1064,7 +1125,6 @@ class Slam(object):
             mask = np.array([mask for _ in range(n_test)])
 
         # 4. scale test_ivar
-
         # test_ivar must be set here!
         if test_ivar is None:
             # test_ivar=None, directly set test_ivar
@@ -1077,12 +1137,20 @@ class Slam(object):
             # don't do scaling for test_ivar
 
         # 5. update test_ivar : negative ivar set to 0
-        test_ivar = np.where(test_ivar < 0.,
-                             np.zeros_like(test_ivar), test_ivar)
-        test_ivar = np.where(np.isnan(test_ivar),
-                             np.zeros_like(test_ivar), test_ivar)
-        test_ivar = np.where(np.isinf(test_ivar),
-                             np.zeros_like(test_ivar), test_ivar)
+        test_ivar = np.where(
+            np.logical_and(test_ivar >= ivar_eps, np.isfinite(test_ivar)),
+            test_ivar, np.zeros_like(test_ivar))
+
+        # 5'. take into account model error
+        if model_ivar is not None:
+            # fix model_ivar
+            model_ivar = np.where(
+                np.logical_and(model_ivar > ivar_eps, np.isfinite(model_ivar)),
+                model_ivar, 0.)
+            # calculate total_ivar
+            test_ivar = np.where(
+                np.logical_or(model_ivar < ivar_eps, test_ivar < ivar_eps), 0.,
+                test_ivar * model_ivar / (test_ivar + model_ivar))
 
         # 6. update mask for low ivar pixels
         # test_ivar_threshold = np.array(
@@ -1096,9 +1164,12 @@ class Slam(object):
             mask = np.logical_and(mask, test_flux > flux_eps)
         else:
             mask = np.logical_and(mask, test_ivar > 0.)
+        print("@SLAM: The spectra with fewest pixels unmasked is "
+              "[{}/{}]".format(np.min(np.sum(mask, axis=1)), self.n_pix))
 
         # 7. test_ivar normalization --> not necessary
         # test_ivar /= np.sum(test_ivar, axis=1).reshape(-1, 1)
+        test_ivar /= np.percentile(test_ivar, 90, axis=1).reshape(-1, 1)
 
         assert test_flux.shape == test_ivar.shape
         assert test_flux.shape == mask.shape
@@ -1142,18 +1213,79 @@ class Slam(object):
             prompts = [i for i in range(n_test)]
 
         # 9. loop predictions
-        results_mcmc = Parallel(n_jobs=n_jobs, verbose=verbose)(
-            delayed(predict_label_mcmc)(
-                X0[i], self.svrs, test_flux[i], test_ivar[i], mask[i],
-                theta_lb=theta_lb, theta_ub=theta_ub,
-                n_walkers=n_walkers, n_burnin=n_burnin,
-                n_run=n_run, threads=threads,
-                return_chain=return_chain,
-                mcmc_run_max_iter=mcmc_run_max_iter,
-                mcc=mcc,
-                prompt=prompts[i],
-                *args, **kwargs) for i in range(n_test)
-        )
+        if profile is None:
+            results_mcmc = Parallel(n_jobs=n_jobs, verbose=verbose)(
+                delayed(predict_label_mcmc)(
+                    X0[i], self.svrs, test_flux[i], test_ivar[i], mask[i],
+                    theta_lb=theta_lb, theta_ub=theta_ub,
+                    n_walkers=n_walkers, n_burnin=n_burnin,
+                    n_run=n_run, threads=threads,
+                    return_chain=return_chain,
+                    mcmc_run_max_iter=mcmc_run_max_iter,
+                    mcc=mcc,
+                    prompt=prompts[i],
+                    **kwargs) for i in range(n_test))
+        else:
+            # timing
+            time1 = time.time()
+
+            # initiate ipcluster
+            dv = launch_ipcluster_dv(profile=profile, targets=targets,
+                                     block=True, max_engines=n_test)
+
+            # collect data
+            kwargs_ = dict(theta_lb=theta_lb, theta_ub=theta_ub,
+                           n_walkers=n_walkers, n_burnin=n_burnin,
+                           n_run=n_run, threads=1,
+                           return_chain=return_chain,
+                           mcmc_run_max_iter=mcmc_run_max_iter,
+                           mcc=mcc, prompt=None)
+            kwargs.update(kwargs_)
+
+            # dump data
+            with NamedTemporaryFile(dir=temp_dir) as f:
+                fp = f.name
+            print("@Slam: dumping data to {} ...".format(fp))
+            dump((X0, self.svrs, test_flux, test_ivar, mask, kwargs), fp)
+
+            # load data
+            print("@Slam: loading data from {} ...".format(fp))
+            dv.execute("X0, svrs, test_flux, test_ivar, mask, kwargs"
+                       " = load('{}')".format(fp))
+            dv.scatter("ind", np.arange(n_test))
+
+            # predict labels
+            print("@Slam: engines are working ...")
+            print("@Slam: take a cup of coffee and have a break ...")
+            print("@Slam: DO NOT INTERRUPT! Or you have to RESTART ipcluster!")
+            dv.execute("from slam.mcmc import predict_label_mcmc")
+            dv.execute("results_mcmc = [predict_label_mcmc("
+                       "X0[i], svrs, test_flux[i], test_ivar[i], mask[i],"
+                       "**kwargs) for i in ind]")
+
+            # dump results
+            dv.execute("f = tempfile.NamedTemporaryFile(dir=temp_dir)")
+            dv.execute("dump_path = f.name")
+            dv.execute("f.close()")
+            dv.execute("dump((results_mcmc, ind), dump_path)")
+
+            # gather results
+            dump_paths = dv.gather("dump_path")
+            print("@Slam: gathering results ...")
+            results_mcmc = [None for i in range(n_test)]
+            for dump_path in dump_paths:
+                results_, ind_ = load(dump_path)
+                for i in range(len(ind_)):
+                    results_mcmc[ind_[i]] = results_[i]
+
+            # remove dump files
+            print("@Slam: removing dump source {} ...".format(fp))
+            os.remove(fp)
+            print("@Slam: removing dump files ...")
+            dv.execute("os.remove(dump_path)")
+
+            # reset engines
+            reset_dv(dv)
 
         # 10. scale X_pred back if necessary
         print("@Cham: wait a minute, I'm converting results ...")

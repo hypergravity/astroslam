@@ -143,7 +143,7 @@ def predict_label_mcmc(theta0, svrs, flux_obs, flux_ivar, mask,
                        theta_lb=None, theta_ub=None,
                        n_walkers=10, n_burnin=200, n_run=500, threads=1,
                        return_chain=False, mcmc_run_max_iter=5, mcc=0.4,
-                       prompt=None, *args, **kwargs):
+                       prompt=None, **kwargs):
     """ predict labels using emcee MCMC """
     # theta length
     n_dim = len(theta0)
