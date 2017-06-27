@@ -23,15 +23,13 @@ Aims
 
 """
 
-from __future__ import print_function
-
 import os
 from tempfile import NamedTemporaryFile
 import time
 import matplotlib.pyplot as plt
 import numpy as np
 from astropy.table import Table
-from ipyparallel import Client
+#from ipyparallel import Client
 from joblib import load, dump, Parallel, delayed
 from sklearn.model_selection import train_test_split
 
@@ -243,7 +241,7 @@ class Slam(object):
         k_keys = k.__dict__.keys()
 
         # delete used keys
-        keys_to_be_del = ['wave', 'tr_flux', 'tr_ivar', 'tr_labels']
+        keys_to_be_del = ["wave", "tr_flux", "tr_ivar", "tr_labels"]
         for key in keys_to_be_del:
             k_keys.remove(key)
 
@@ -310,7 +308,7 @@ class Slam(object):
             "trained............: %s" % self.trained,
             "======================================",
         ]
-        return '\n'.join(repr_strs)
+        return "\n".join(repr_strs)
 
     def hyperparams_summary(self, mask=None):
         """ summarize the hyper-parameter table
@@ -384,7 +382,7 @@ class Slam(object):
 
         Example
         -------
-        >>> k = Slam.load_dump('./slam.dump')
+        >>> k = Slam.load_dump("./slam.dump")
 
         """
         # check file existence
@@ -410,7 +408,7 @@ class Slam(object):
 
         Example
         -------
-        >>> k.save_dump_svrs('./slam_svrs.dump')
+        >>> k.save_dump_svrs("./slam_svrs.dump")
 
         """
         # check file existence
@@ -437,7 +435,7 @@ class Slam(object):
 
         Example
         -------
-        >>> k = Slam.load_dump_svrs('./slam_svrs.dump')
+        >>> k = Slam.load_dump_svrs("./slam_svrs.dump")
         >>> print(k)
 
         """
@@ -483,7 +481,7 @@ class Slam(object):
         return svr, score
 
     def train_pixels(self, profile=None, targets="all", temp_dir=None,
-                     sample_weight_scheme='bool', cv=3, method='simple',
+                     sample_weight_scheme="bool", cv=3, method="simple",
                      n_jobs=10, verbose=10, **kwargs):
         """ train pixels usig SVR
 
@@ -498,10 +496,10 @@ class Slam(object):
             the directory to save temp files
             make sure it's shared between controllers and engines
         sample_weight_scheme: string
-            sample weight scheme for training {'alleven', 'bool', 'ivar'}
+            sample weight scheme for training {"alleven", "bool", "ivar"}
         cv: int
             if cv>1, cv-fold Cross-Validation will be performed
-        method: {'simple' | 'grid' | 'rand'}
+        method: {"simple" | "grid" | "rand"}
             simple: directly use user-defined hyper-parameters
             grid: grid search for optimized hyper-parameters
             rand: randomized search for optimized hyper-parameters
@@ -521,13 +519,13 @@ class Slam(object):
 
         """
         # determine sample_weight
-        assert sample_weight_scheme in ('alleven', 'bool', 'ivar')
+        assert sample_weight_scheme in ("alleven", "bool", "ivar")
 
-        if sample_weight_scheme is 'alleven':
+        if sample_weight_scheme is "alleven":
             # all even (some bad pixels do disturb!)
             sample_weight = np.ones_like(self.tr_flux_scaled)
 
-        elif sample_weight_scheme is 'bool':
+        elif sample_weight_scheme is "bool":
             # 0|1 scheme for training flux (recommended)
             sample_weight = self.tr_mask.astype(np.float)
             ind_all_bad = np.sum(sample_weight, axis=0) < 1.
@@ -538,7 +536,7 @@ class Slam(object):
                     sample_weight[:, i_pix] = 1.
             self.ind_all_bad = ind_all_bad
 
-        elif sample_weight_scheme is 'ivar':
+        elif sample_weight_scheme is "ivar":
             # according to ivar (may cause bias due to sampling)
             sample_weight = self.tr_ivar_scaled
 
@@ -596,10 +594,10 @@ class Slam(object):
                   self.sample_weight, kwargs), dump_source)
 
             # load training data in engines
-            dv.execute("import os\n"
-                       "import tempfile\n"
-                       "from joblib import dump, load\n"
-                       "from slam.train import train_multi_pixels")
+            dv.execute("import os")
+            dv.execute("import tempfile")
+            dv.execute("from joblib import dump, load")
+            dv.execute("from slam.train import train_multi_pixels")
 
             dv.scatter("ind", np.arange(self.n_pix))
             dv.push({"dump_source": dump_source, "temp_dir": temp_dir})
@@ -746,6 +744,9 @@ class Slam(object):
                                               test_flux, test_ivar,
                                               n_jobs=n_jobs, verbose=verbose)
         else:
+            # timing
+            time1 = time.time()
+
             # initiate ipcluster
             dv = launch_ipcluster_dv(profile=profile, targets=targets,
                                      block=True)
@@ -789,11 +790,16 @@ class Slam(object):
             print("@Slam: removing dump file {} ... ".format(dump_path))
             os.remove(dump_path)
 
+            # finishing
+            time2 = time.time()
+            print("@Slam: it took so long [{}] ..."
+                  "".format(print_time_cost(time2 - time1)))
+
         return X_quick
 
     def predict_labels_ipc(self, X_init, test_flux, test_ivar, mask=None,
                            profile="default", targets="all", temp_dir=None,
-                           reset=True, *args, **kwargs):
+                           count_size=True, reset=True, *args, **kwargs):
         """ parallel using ipcluster, make sure there is an ipcluster available
         
         Parameters
@@ -831,14 +837,10 @@ class Slam(object):
                                  max_engines=test_flux.shape[0])
 
         # import modules in ipcluster
-        dv.execute("import os\n"
-                   "import numpy as np\n"
-                   "from slam.slam import Slam\n"
-                   "from joblib import Parallel, delayed, dump, load\n")
-
-        # estimate size of Slam
-        print("@Slam: size of me is about {} MB ".format(
-            self.total_size / 1024 ** 2))
+        dv.execute("import os")
+        dv.execute("import tempfile")
+        dv.execute("from joblib import dump, load")
+        dv.execute("from slam.train import train_multi_pixels")
 
         # save Slam instance
         with NamedTemporaryFile(dir=temp_dir) as f:
@@ -846,9 +848,15 @@ class Slam(object):
         print("@Slam: saving Slam instance to {} ...".format(fp))
         self.save_dump(fp, overwrite=True)
 
+        # estimate size of Slam
+        if count_size:
+            print("@Slam: size of me is about {} MB ".format(
+                os.path.getsize(fp) / 1024 ** 2))
+
         # load Slam instance
         print("@Slam: loading Slam instance from {} ...".format(fp))
-        dv.execute("s = Slam.load_dump('{}')".format(fp))
+        dv.execute("from joblib import load")
+        dv.execute("s = load('{}')".format(fp))
 
         # scatter data
         print("@Slam: scattering & pushing data to engines ...")
@@ -1284,6 +1292,11 @@ class Slam(object):
             print("@Slam: removing dump files ...")
             dv.execute("os.remove(dump_path)")
 
+            # finishing
+            time2 = time.time()
+            print("@Slam: it took so long [{}] ..."
+                  "".format(print_time_cost(time2 - time1)))
+
             # reset engines
             reset_dv(dv)
 
@@ -1293,20 +1306,20 @@ class Slam(object):
         # inverse-transform theta
         if labels_scaler is not None:
             for i in range(len(results_mcmc)):
-                results_mcmc[i]['theta'] = \
-                    labels_scaler.inverse_transform(results_mcmc[i]['theta'])
+                results_mcmc[i]["theta"] = \
+                    labels_scaler.inverse_transform(results_mcmc[i]["theta"])
 
         # extract L M U from theta
-        X_predl = np.array([r['theta'][0] for r in results_mcmc])
-        X_predm = np.array([r['theta'][1] for r in results_mcmc])
-        X_predu = np.array([r['theta'][2] for r in results_mcmc])
+        X_predl = np.array([r["theta"][0] for r in results_mcmc])
+        X_predm = np.array([r["theta"][1] for r in results_mcmc])
+        X_predu = np.array([r["theta"][2] for r in results_mcmc])
 
         # if flatchain is returned, inverse-transform flatchain
         if return_chain and labels_scaler is not None:
             for i in range(len(results_mcmc)):
-                results_mcmc[i]['flatchain'] = \
+                results_mcmc[i]["flatchain"] = \
                     labels_scaler.inverse_transform(
-                        results_mcmc[i]['flatchain'])
+                        results_mcmc[i]["flatchain"])
 
         return X_predl, X_predm, X_predu, results_mcmc
 
@@ -1357,11 +1370,11 @@ class Slam(object):
                                 i_pixel,
                                 test_labels,
                                 diag_dim=(0, 1),
-                                labels_scaler='default',
-                                flux_scaler='default'):
-        if labels_scaler is 'default':
+                                labels_scaler="default",
+                                flux_scaler="default"):
+        if labels_scaler is "default":
             labels_scaler = self.tr_labels_scaler
-        if flux_scaler is 'default':
+        if flux_scaler is "default":
             flux_scaler = self.tr_flux_scaler
 
         return single_pixel_diagnostic(self.svrs,
@@ -1508,28 +1521,28 @@ class Slam(object):
         plt.rcParams.update({"font.size":fontsize})
         fig, axs = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
         fig.sca(axs[0])
-        plt.plot(self.wave, self.tr_flux_scaler.mean_, label='flux mean')
-        plt.plot(self.wave, self.tr_flux_scaler.scale_, label='flux scale')
+        plt.plot(self.wave, self.tr_flux_scaler.mean_, label="flux mean")
+        plt.plot(self.wave, self.tr_flux_scaler.scale_, label="flux scale")
         plt.legend(loc=5, framealpha=.3)
 
         fig.sca(axs[1])
-        plt.plot(self.wave, -self.scores, label='cross validated MSE')
-        plt.plot(self.wave, -self.training_nmse(30), label='training MSE')
+        plt.plot(self.wave, -self.scores, label="cross validated MSE")
+        plt.plot(self.wave, -self.training_nmse(30), label="training MSE")
         if mse_hline is not None:
-            plt.hlines(mse_hline, self.wave[0], self.wave[-1], linestyle='--',
-                       color='gray')
+            plt.hlines(mse_hline, self.wave[0], self.wave[-1], linestyle="--",
+                       color="gray")
         plt.legend(loc=5, framealpha=.3)
 
         fig.sca(axs[2])
-        plt.plot(self.wave, np.log10(self.hyperparams['C']),
-                 label='$\\log(C)$')
-        plt.plot(self.wave, np.log10(self.hyperparams['gamma']),
-                 label='$\\log(\gamma)$')
-        plt.plot(self.wave, np.log10(self.hyperparams['epsilon']),
-                 label='$\\log(\epsilon)$')
+        plt.plot(self.wave, np.log10(self.hyperparams["C"]),
+                 label="$\\log(C)$")
+        plt.plot(self.wave, np.log10(self.hyperparams["gamma"]),
+                 label="$\\log(\gamma)$")
+        plt.plot(self.wave, np.log10(self.hyperparams["epsilon"]),
+                 label="$\\log(\epsilon)$")
         plt.legend(loc=5, framealpha=.3)
 
-        plt.xlabel('$\lambda$ ($\\rm \AA$)')
+        plt.xlabel("$\lambda$ ($\\rm \AA$)")
         plt.xlim(self.wave[[0, -1]])
 
         fig.tight_layout()
@@ -1814,5 +1827,5 @@ def _test_repr():
     print(k)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     _test_repr()
