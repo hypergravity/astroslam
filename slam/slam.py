@@ -1272,6 +1272,7 @@ class Slam(object):
                        "**kwargs) for i in ind]")
 
             # dump results
+            dv.execute("import tempfile")
             dv.execute("f = tempfile.NamedTemporaryFile(dir=temp_dir)")
             dv.execute("dump_path = f.name")
             dv.execute("f.close()")
