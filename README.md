@@ -10,10 +10,11 @@ Bo Zhang (bozhang@nao.cas.cn)
 
 # Installation
 
-Currently, you have to download the package and install it using
-`(sudo) python setup.py install`.
+Currently, you have 2 options
 
-In the future, use `pip install slam`.
+- download the package and install it using
+`(sudo) python setup.py install`.
+- `(sudo) pip install astroslam`.
 
 
 # Requirements
