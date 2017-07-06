@@ -24,9 +24,10 @@ Aims
 """
 
 import numpy as np
-from scipy.optimize import minimize, least_squares, curve_fit
-from matplotlib import pyplot as plt
 from lmfit.models import GaussianModel
+from matplotlib import pyplot as plt
+from scipy.optimize import minimize, curve_fit
+from joblib import dump, load, Parallel, delayed
 
 
 # ################ #
@@ -188,26 +189,13 @@ def gfit_bin_lmfit(data, bins='', bin_std=3, plot=False):
     return (fr.values['amplitude'], fr.values['center'], fr.values['sigma']),fr
 
 
-def label_diff_lmfit(label1, label2, bins='robust', bin_std=3, plot=False):
-    """ label difference between label2 and label1(truth)
-    
-    Parameters
-    ----------
-    label1:
-        truth
-    label2:
-        guess
-    bins: str
-        "auto" is recommended
-    bin_std:
-        binwidth = std/bin_std
-    plot: bool
-        if True, plot figure
+def run_mcmc(fr, **kwargs):
+    fr.mcmc = fr.emcee(**kwargs)
+    return fr
 
-    Returns
-    -------
 
-    """
+def label_diff_lmfit(label1, label2, bins='auto', bin_std=3, plot=False,
+                     emcee=True):
     label1 = np.array(label1)
     label2 = np.array(label2)
     assert label1.shape == label2.shape
@@ -223,12 +211,22 @@ def label_diff_lmfit(label1, label2, bins='robust', bin_std=3, plot=False):
         theta, frs[i_dim] = \
             gfit_bin_lmfit(data, bins=bins, bin_std=bin_std, plot=False)
         amp[i_dim], bias[i_dim], scatter[i_dim] = theta
-            
+    params = [fr.params for fr in frs]
+
+    if emcee:
+        frs = Parallel(n_jobs=-1)(delayed(run_mcmc)(
+            fr, steps=1000, nwalkers=50, burn=300, workers=1) for fr in frs)
+        for i_dim in range(n_dim):
+            bias[i_dim], _, scatter[i_dim] = np.median(
+                frs[i_dim].mcmc.flatchain, axis=0)
+        params = [fr.mcmc.params for fr in frs]
+
+    histdata = []
     if plot:
         gm = GaussianModel()
-        fig = plt.figure(figsize=(3*n_dim, 4))
+        fig = plt.figure(figsize=(3 * n_dim, 4))
         for i_dim in range(n_dim):
-            ax = fig.add_subplot(1, n_dim, i_dim+1)
+            ax = fig.add_subplot(1, n_dim, i_dim + 1)
             data = label2[:, i_dim] - label1[:, i_dim]
 
             # binned statistics
@@ -236,13 +234,20 @@ def label_diff_lmfit(label1, label2, bins='robust', bin_std=3, plot=False):
                 bins = np.arange(
                     np.min(data), np.max(data), np.std(data) / bin_std)
             hist, bin_edges = np.histogram(data, bins=bins)
+            histdata.append((hist, bin_edges, data))
             # bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
             # bin_xx = np.linspace(bin_edges[0], bin_edges[-1], 100)
-            print(bin_edges)
             ax.hist(data, bins=bin_edges, histtype='step')
-            ax.plot(bin_edges, gm.eval(frs[i_dim].params, x=bin_edges))
+            ax.plot(bin_edges, gm.eval(params[i_dim], x=bin_edges))
+            ax.set_title("{:5f}+-{:5f}".format(bias[i_dim], scatter[i_dim]))
+    else:
+        for i_dim in range(n_dim):
+            data = label2[:, i_dim] - label1[:, i_dim]
+            hist, bin_edges = np.histogram(data, bins=bins)
+            histdata.append((hist, bin_edges, data))
 
-    return bias, scatter, frs
+    return bias, scatter, frs, histdata
+
 
 if __name__ == "__main__":
     test_gfit_mle()
