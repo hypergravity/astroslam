@@ -1284,6 +1284,7 @@ class Slam2(object):
                        "**kwargs) for i in ind]")
 
             # dump results
+            dv.push({"temp_dir": temp_dir})
             dv.execute("import tempfile")
             dv.execute("f = tempfile.NamedTemporaryFile(dir=temp_dir)")
             dv.execute("dump_path = f.name")

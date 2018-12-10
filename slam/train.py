@@ -61,6 +61,7 @@ def train_single_pixel(X, y, sample_weight=None, cv=10,
 
     if sample_weight is None:
         sample_weight = np.ones_like(y, float)
+
     ind_use = sample_weight > 0
     X_ = X[ind_use]
     y_ = y[ind_use]
@@ -77,7 +78,8 @@ def train_single_pixel(X, y, sample_weight=None, cv=10,
         # cross-validation will be performed to calculate MSE
         assert isinstance(cv, int) and cv >= 2
         scores = model_selection.cross_val_score(
-            svr, X_, y_, scoring='neg_mean_squared_error', cv=cv)
+            svr, X_, y_, scoring='neg_mean_squared_error',
+            cv=np.min((cv, len(y_))))
         score = scores.mean()
 
     return svr, score
@@ -113,6 +115,8 @@ def train_single_pixel_grid(X, y, sample_weight=None, cv=10,
     if CV is not performed, score = np.nan
 
     """
+    if sample_weight is None:
+        sample_weight = np.zeros_like(y, float)
 
     # default param_grid
     if param_grid is None:
@@ -121,15 +125,34 @@ def train_single_pixel_grid(X, y, sample_weight=None, cv=10,
                           gamma=['auto', 0.2, 0.25, 0.3, 0.5])
     # instantiate SVR
     svr = svm.SVR(**kwargs)
-    # perform GridSearchCV
-    grid = GridSearchCV(svr, param_grid, cv=cv,
-                        fit_params={'sample_weight': sample_weight},
-                        scoring='neg_mean_squared_error', n_jobs=1)
-    # fit data
-    grid.fit(X, y)
 
-    # return (svr, score)
-    return grid, grid.best_score_
+    ind_use = sample_weight > 0
+    X_ = X[ind_use]
+    y_ = y[ind_use]
+    sample_weight_ = sample_weight[ind_use]
+
+    # perform GridSearchCV
+    if len(y_) >= 2:
+        # if number of good pixels larger than 2, save it
+        grid = GridSearchCV(svr, param_grid, cv=np.min((cv, len(y_))),
+                            fit_params={'sample_weight': sample_weight_},
+                            scoring='neg_mean_squared_error', n_jobs=1)
+        # fit data
+        grid.fit(X_, y_)
+
+        # return (svr, score)
+        return grid, grid.best_score_
+
+    else:
+        # if only 1 good pixel, fit mock data
+        grid = GridSearchCV(svr, param_grid, cv=cv,
+                            fit_params={'sample_weight': sample_weight_},
+                            scoring='neg_mean_squared_error', n_jobs=1)
+        # fit mock data
+        grid.fit(np.zeros((cv, X.shape[1]), float), np.zeros((cv,), float))
+
+        # return (svr, score)
+        return grid, 1.0
 
 
 def train_single_pixel_rand(X, y, sample_weight=None, cv=10,
@@ -163,6 +186,9 @@ def train_single_pixel_rand(X, y, sample_weight=None, cv=10,
     if CV is not performed, score = np.nan
 
     """
+
+    if sample_weight is None:
+        sample_weight = np.ones_like(y, float)
 
     # default param_grid
     if param_dist is None:
@@ -234,7 +260,7 @@ def train_single_pixel_mini(X, y, sample_weight=None, cv=10, **kwargs):
                               gamma=gamma, C=C, epsilon=epsilon, **kwargs)
 
 
-def train_multi_pixels(X, ys, sample_weights, cv=1,
+def train_multi_pixels(X, ys, sample_weights, cv=1, min_pix=10,
                        method='simple', n_jobs=1, verbose=10, **kwargs):
     """ train multi pixels
 

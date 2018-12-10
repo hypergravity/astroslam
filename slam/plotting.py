@@ -29,6 +29,7 @@ import matplotlib.pyplot as plt
 from scipy.stats import binned_statistic_2d
 from matplotlib import cm
 from lmfit.models import GaussianModel
+from mpl_toolkits.mplot3d import Axes3D
 
 from .analysis import label_diff_lmfit
 
@@ -138,6 +139,9 @@ def compare_labels(X_true, X_pred,
 
         axs2[i + 1, -1].yaxis.tick_right()
 
+        if i < nlabel-1:
+            axs2[i + 1, -1].set_xticklabels([])
+
     axs2[-1, -1].set_xlabel("Counts")
 
     # 2. diagnal
@@ -189,3 +193,70 @@ def compare_labels(X_true, X_pred,
 
 # axs1 = np.array([fig.add_subplot(gs1[i]) for i in range(6)])
 # axs2 = np.array([[fig.add_subplot(gs2[j, i]) for i in range(7)] for j in range(7)])
+
+
+def visual3d(s, wave, diag_dim=()):
+    """ single pixel diagnostic """
+
+    diag_dim = (0, 1)
+
+    i_pixel = 5175 - 3900
+    # i_pixel = 4861-3900
+    x, y, flux = s.single_pixel_diagnostic(i_pixel, s.tr_labels,
+                                           diag_dim=diag_dim)
+
+    fig = plt.figure(figsize=(10, 10))
+    ax = fig.add_subplot(111, projection='3d')
+    ax.scatter3D(s.tr_labels[:, 0], s.tr_labels[:, 1], s.tr_flux[:, i_pixel],
+                 s=10, c=s.tr_labels[:, 2], alpha=.5, cmap=cm.jet)
+    plt.colorbar()
+    # plt.plot(x,y, flux,'b.')
+    ax.set_zlim(0., 2.)
+    plt.xlabel('Teff')
+    plt.ylabel('logg')
+    plt.title('PIXEL: %s' % i_pixel)
+    fig.tight_layout()
+
+    # %%
+    diag_dim = (0, 2)
+
+    i_pixel = 6564 - 3900
+    i_pixel = 4861 - 3900
+
+    sdiag_teff = np.arange(4000., 8000., 100.)
+    sdiag_logg = np.arange(1., 5., .2)
+    sdiag_logg = np.arange(-2, 1., .2)
+    msdiag_teff, msdiag_logg = np.meshgrid(sdiag_teff, sdiag_logg)
+    msdiag_feh = np.zeros_like(msdiag_teff)
+    msdiag_labels = np.array([msdiag_teff.flatten(),
+                              msdiag_logg.flatten(),
+                              msdiag_feh.flatten()]).T
+
+    H, xedges, yedges = np.histogram2d(train_labels[:, 0], train_labels[:, 2],
+                                       bins=(sdiag_teff, sdiag_logg))
+    xcenters = (xedges[:-1] + xedges[1:]) / 2.
+    ycenters = (yedges[:-1] + yedges[1:]) / 2.
+    xmesh, ymesh = np.meshgrid(xcenters, ycenters)
+
+    x, y, flux = s.single_pixel_diagnostic(i_pixel, msdiag_labels,
+                                           diag_dim=diag_dim)
+
+    # flux[:20]=np.nan
+
+    fig = plt.figure(figsize=(10, 10))
+    ax = fig.add_subplot(111, projection='3d')
+    # ax.scatter(x,y,flux, c=msdiag_feh)
+    surf = ax.plot_surface(msdiag_teff, msdiag_logg,
+                           flux.reshape(msdiag_teff.shape),
+                           vmin=np.min(flux), vmax=np.max(flux), cmap=cm.jet)
+    ax.contour(xmesh, ymesh, np.log(H.T), extend3d=False, offset=1.20,
+               color='k')
+    # plt.plot(x,y, flux,'b.')
+    ax.set_zlim(0., 2.)
+    plt.xlabel('Teff')
+    plt.ylabel('logg')
+    plt.title('PIXEL: %s' % i_pixel)
+
+    fig.colorbar(surf, shrink=.5, aspect=5)
+    fig.tight_layout()
+    # fig.savefig("../data/laap/figs/PIXEL6564_C8_E0P08_G1.svg")

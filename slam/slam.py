@@ -91,6 +91,7 @@ class Slam(object):
     trained = False
     sample_weight = None
     ind_all_bad = None
+    min_num_pix = 0.1
 
     uniform_dict = None
     uniform_picked = None
@@ -482,7 +483,7 @@ class Slam(object):
 
     def train_pixels(self, profile=None, targets="all", temp_dir=None,
                      sample_weight_scheme="bool", cv=3, method="simple",
-                     n_jobs=10, verbose=10, **kwargs):
+                     min_num_pix=.1, n_jobs=10, verbose=10, **kwargs):
         """ train pixels usig SVR
 
         Parameters
@@ -1273,7 +1274,7 @@ class Slam(object):
 
             # dump results
             dv.execute("import tempfile")
-            dv.execute("f = tempfile.NamedTemporaryFile(dir=temp_dir)")
+            dv.execute("f = tempfile.NamedTemporaryFile(dir={})".format(temp_dir))
             dv.execute("dump_path = f.name")
             dv.execute("f.close()")
             dv.execute("dump((results_mcmc, ind), dump_path)")
@@ -1477,6 +1478,8 @@ class Slam(object):
         return self.nmse
 
     def automask(self, flux=None, ivar=None, min_num_pix=0.6, ivar_eps=1e0):
+        if min_num_pix is None:
+            min_num_pix = self.min_num_pix
         if isinstance(min_num_pix, int):
             # absolute value
             pass

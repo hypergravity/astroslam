@@ -138,6 +138,7 @@ class SlamModel(object):
                                    scoring=self.scoring).mean()
 
     def fit(self, X, y, weight=None):
+        mock = False
         if weight is None:
             # support weight
             if self.model == "nn":
@@ -152,26 +153,35 @@ class SlamModel(object):
 
         else:
             ind_weight = weight > 0
+            X_ = X[ind_weight]
+            y_ = y[ind_weight]
+            weight_ = weight[ind_weight]
+
+            if np.sum(ind_weight) < self.cv:
+                X_ = np.zeros((self.cv, X.shape[1]), float)
+                y_ = np.zeros((self.cv,), float)
+                weight_ = np.zeros((self.cv,), float)
+                mock = True
+
             # support weight
             if self.model == "nn":
-                self.regressor.fit(X[ind_weight], y[ind_weight])
+                self.regressor.fit(X_, y_)
                 if self.method == "grid":
                     self.score_ = self.regressor.best_score_
                 else:
-                    self.score_ = self.cross_val_score(
-                        X[ind_weight], y[ind_weight])
+                    self.score_ = self.cross_val_score(X_, y_)
 
             else:
-                self.regressor.fit(X[ind_weight], y[ind_weight],
-                                   weight[ind_weight])
+                self.regressor.fit(X_, y_, weight_)
 
                 if self.method == "grid":
                     self.score_ = self.regressor.best_score_
                 else:
-                    self.score_ = self.cross_val_score(
-                        X[ind_weight], y[ind_weight], weight[ind_weight])
+                    self.score_ = self.cross_val_score(X_, y_, weight_)
 
         self.trained = True
+        if mock:
+            self.score_ = 1.0
 
         return
 
@@ -215,7 +225,6 @@ class SlamModel(object):
         if CV is not performed, score = np.nan
 
         """
-
         sm = SlamModel(model=model, method=method,
                        param_grid=param_grid, cv=cv, scoring=scoring,
                        **kwargs)
