@@ -217,8 +217,8 @@ def label_diff_lmfit(label1, label2, bins='auto', bin_std=3, plot=False,
         frs = Parallel(n_jobs=-1)(delayed(run_mcmc)(
             fr, steps=1000, nwalkers=50, burn=300, workers=1) for fr in frs)
         for i_dim in range(n_dim):
-            bias[i_dim], _, scatter[i_dim] = np.median(
-                frs[i_dim].mcmc.flatchain, axis=0)
+            bias[i_dim] = np.median(frs[i_dim].mcmc.flatchain["center"])
+            scatter[i_dim] = np.median(frs[i_dim].mcmc.flatchain["sigma"])
         params = [fr.mcmc.params for fr in frs]
 
     histdata = []
