@@ -883,12 +883,12 @@ class Slam3(object):
             dv.push({"mask": mask})
         dv.push({"args": args, "kwargs": kwargs})
         print("@Slam: engines are working ...")
-        dv.execute("X_pred = s.predict_labels_multi("
+        dv.execute("r_pred = s.predict_labels_multi("
                    "X_init, test_flux, test_ivar, *args, **kwargs)")
         print("@Slam: take a cup of coffee and have a break ...")
         print("@Slam: DO NOT INTERRUPT! Or you have to RESTART ipcluster!")
         print("@Slam: gathering results ...")
-        X_pred = dv.gather("X_pred")
+        r_pred = dv.gather("r_pred")
 
         time2 = time.time()
         print("@Slam: it took so long [{}] ..."
@@ -897,7 +897,7 @@ class Slam3(object):
         if reset:
             reset_dv(dv)
 
-        return X_pred
+        return r_pred
 
     # in this method, do not use scaler defined in predict_labels()
     def predict_labels_multi(self, X0, test_flux, test_ivar=None, mask=None,

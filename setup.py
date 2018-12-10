@@ -1,10 +1,10 @@
 from distutils.core import setup
-from .slam import __version__
+# from .slam import __version__
 
 if __name__ == '__main__':
     setup(
         name='astroslam',
-        version=__version__,
+        version="1.2018.1210.4",
         author='Bo Zhang',
         author_email='bozhang@nao.cas.cn',
         description=('A forward model using SVR to estimate stellar parameters'
