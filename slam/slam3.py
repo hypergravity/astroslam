@@ -1368,7 +1368,7 @@ class Slam3(object):
         flux_pred = np.array([_[0] for _ in flux_pred])
 
         if flux_scaler:
-            self.tr_flux_scaler.inverse_transform(flux_pred)
+            return self.tr_flux_scaler.inverse_transform(flux_pred)
 
         return flux_pred
 

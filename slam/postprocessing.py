@@ -72,6 +72,6 @@ def do_post(ls_result, label_scaler=None):
     pp_result["status"] = ls_result["status"]
     pp_result["success"] = ls_result["success"]
 
-    pp_result["x"] = label_scaler.inverse_transform(ls_result["x"].reshape(1, -1))
+    pp_result["x"] = label_scaler.inverse_transform(ls_result["x"].reshape(1, -1)).flatten()
 
     return pp_result
