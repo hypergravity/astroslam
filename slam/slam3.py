@@ -37,7 +37,7 @@ from .hyperparameter import (summarize_hyperparameters_to_table,
                              summarize_table,
                              hyperparameter_grid_stats)
 from .mcmc import predict_label_mcmc
-from .predict import predict_labels3, predict_labels_chi2, predict_spectrum
+from .predict import predict_labels3, predict_labels_chi2, predict_spectrum, predict_pixel
 from .standardization import standardize, standardize_ivar
 from .train2 import train_multi_pixels, train_single_pixel
 from .utils import convolve_mask, uniform, getsize, sizeof
@@ -1339,7 +1339,7 @@ class Slam3(object):
 
     def predict_spectra(self, X_pred, labels_scaler=True, flux_scaler=True,
                         n_jobs=1, verbose=False):
-        """ predict spectra using trained SVRs
+        """ predict spectra using trained SVRs [paralleled via labels]
 
         Parameters
         ----------
@@ -1367,6 +1367,39 @@ class Slam3(object):
         )
         flux_pred = np.array([_[0] for _ in flux_pred])
 
+        if flux_scaler:
+            return self.tr_flux_scaler.inverse_transform(flux_pred)
+
+        return flux_pred
+    
+    def predict_spectra_ppixel(self, X_pred, labels_scaler=True, 
+                               flux_scaler=True, n_jobs=1, verbose=False):
+        """ predict spectra using trained SVRs [paralleled via pixels]
+
+        Parameters
+        ----------
+        X_pred: ndarray (n_test, n_dim)
+            labels of predicted spectra
+
+        Returns
+        -------
+        pred_flux: ndarray (n_test, n_pix)
+            predicted spectra
+
+        """
+        # convert 1d label to 2d label
+        if X_pred.ndim == 1:
+            X_pred = X_pred.reshape(1, -1)
+
+        #
+        if labels_scaler:
+            X_pred = self.tr_labels_scaler.transform(X_pred)
+
+        flux_pred = Parallel(n_jobs=n_jobs, verbose=verbose)(
+            delayed(predict_pixel)(_, X_pred) for _ in self.sms)
+    
+        flux_pred = np.array(flux_pred).T
+        
         if flux_scaler:
             return self.tr_flux_scaler.inverse_transform(flux_pred)
 
