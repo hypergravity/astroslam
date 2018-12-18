@@ -30,6 +30,10 @@ from joblib import Parallel, delayed
 from .extern.interpolate import SmoothSpline
 
 
+def normalize_spectrum_null(wave):
+    return np.ones_like(wave)*np.nan, np.ones_like(wave)*np.nan
+
+
 def normalize_spectrum(wave, flux, norm_range, dwave,
                        p=(1E-6, 1E-6), q=0.5, ivar=None, eps=1e-10,
                        rsv_frac=1.):
@@ -75,6 +79,9 @@ def normalize_spectrum(wave, flux, norm_range, dwave,
     >>>     rsv_frac=2.0)
 
     """
+    if np.sum(np.isfinite(flux)) <= 10:
+        return normalize_spectrum_null(wave)
+
     if ivar is not None:
         # ivar is set
         ivar = np.where(np.logical_or(wave < norm_range[0],
@@ -129,7 +136,7 @@ def normalize_spectrum(wave, flux, norm_range, dwave,
     try:
         assert np.sum(ind_good) > 0
     except AssertionError:
-        Warning("@Keenan.normalize_spectrum(): unable to find continuum! ")
+        Warning("@Keenan.normalize_spectrum(): unable to find continuum!")
         ind_good = np.ones(wave.shape, dtype=np.bool)
 
     # SMOOTH 2
