@@ -79,7 +79,7 @@ def normalize_spectrum(wave, flux, norm_range, dwave,
     >>>     rsv_frac=2.0)
 
     """
-    if np.sum(np.isfinite(flux)) <= 10:
+    if np.sum(np.logical_and(np.isfinite(flux), flux > 0)) <= 100:
         return normalize_spectrum_null(wave)
 
     if ivar is not None:
