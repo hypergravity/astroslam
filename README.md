@@ -1,23 +1,25 @@
-# SLAM
+## SLAM
 
 Stellar LAbel Machine (SLAM) is a forward model to estimate stellar parameters (e.g., Teff, logg, [Fe/H] and chemical abundances).
 It is based on Support Vector Regression (SVR), which in essential is a non-parametric regression method.
 
-# Author
+## Author
 
 Bo Zhang (bozhang@nao.cas.cn)
 
+## Home page
 
-# Installation
+- [https://github.com/hypergravity/astroslam](https://github.com/hypergravity/astroslam)
+- [https://pypi.org/project/astroslam/](https://pypi.org/project/astroslam/)
 
-Currently, you have 2 options
+## Install
+- for the latest **stable** version:
+  - `pip install astroslam`
+- for the latest **github** version:
+  - `pip install git+git://github.com/hypergravity/astroslam`
 
-- download the package and install it using
-`(sudo) python setup.py install`.
-- `(sudo) pip install astroslam`.
 
-
-# Requirements
+## Requirements
 
 - numpy
 - scipy
