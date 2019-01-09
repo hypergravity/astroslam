@@ -51,7 +51,7 @@ class Slam3(object):
     # training data
     wave = np.zeros((0, 0))
     tr_flux = np.zeros((0, 0))
-    tr_flux_rep = np.zeros((0, 0))
+    tr_flux_rep = None
     tr_ivar = np.zeros((0, 0))
     tr_labels = np.zeros((0, 0))
     tr_mask = np.zeros((0, 0), bool)
@@ -301,6 +301,7 @@ class Slam3(object):
             "scores.............: list[%s]" % len(self.scores),
             "hyper-parameters...: Table[length=%s]" % len(self.hyperparams),
             "trained............: %s" % self.trained,
+            "replicated.........: %s" % (self.tr_flux_rep is not None),
             "======================================",
         ]
         return "\n".join(repr_strs)
@@ -1373,14 +1374,17 @@ class Slam3(object):
 
         return flux_pred
 
-    def replicate_training_flux(self, n_jobs=-1, verbose=False):
+    def replicate_training_flux(self, n_jobs=-1, verbose=50):
         """ replicate training flux """
+        if self.tr_flux_rep is not None:
+            raise UserWarning("@Slam: replacing Slam.tr_flux_rep ...")
+
         self.tr_flux_rep = self.predict_spectra_ppixel(
             self.tr_labels, n_jobs=n_jobs, verbose=verbose)
         return
-    
+
     def predict_spectra_ppixel(self, X_pred, labels_scaler=True, 
-                               flux_scaler=True, n_jobs=-1, verbose=False):
+                               flux_scaler=True, n_jobs=-1, verbose=50):
         """ predict spectra using trained SVRs [paralleled via pixels]
 
         Parameters
