@@ -279,7 +279,7 @@ class Slam3(object):
     def __repr__(self):
         repr_strs = [
             "======================================",
-            "Slam2 instance:",
+            "Slam3 instance:",
             "======================================",
             "tr_flux............: ( %s x %s )" % self.tr_flux.shape,
             "tr_ivar............: ( %s x %s )" % self.tr_ivar.shape,
