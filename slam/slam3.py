@@ -1377,7 +1377,7 @@ class Slam3(object):
     def replicate_training_flux(self, n_jobs=-1, verbose=50):
         """ replicate training flux """
         if self.tr_flux_rep is not None:
-            raise UserWarning("@Slam: replacing Slam.tr_flux_rep ...")
+            print("@SLAM3: replacing existing Slam.tr_flux_rep ...")
 
         self.tr_flux_rep = self.predict_spectra_ppixel(
             self.tr_labels, n_jobs=n_jobs, verbose=verbose)
