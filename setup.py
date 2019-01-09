@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name='astroslam',
-    version="1.2019.0109.1",
+    version="1.2019.0109.2",
     author='Bo Zhang',
     author_email='bozhang@nao.cas.cn',
     description=('A forward model using SVR to estimate stellar parameters'
