@@ -1006,15 +1006,18 @@ class Slam3(object):
             test_ivar, np.zeros_like(test_ivar))
 
         # 5'. take into account model error
-        if model_ivar is not None:
-            # fix model_ivar
-            model_ivar = np.where(
-                np.logical_and(model_ivar > ivar_eps, np.isfinite(model_ivar)),
-                model_ivar, 0.)
-            # calculate total_ivar
-            test_ivar = np.where(
-                np.logical_or(model_ivar < ivar_eps, test_ivar < ivar_eps), 0.,
-                test_ivar * model_ivar / (test_ivar + model_ivar))
+        if model_ivar is None:
+            # using model error
+            mse = -self.training_nmse(1, False)
+            model_ivar = mse**-2.
+        # fix model_ivar
+        model_ivar = np.where(
+            np.logical_and(model_ivar > ivar_eps, np.isfinite(model_ivar)),
+            model_ivar, 0.)
+        # calculate total_ivar
+        test_ivar = np.where(
+            np.logical_or(model_ivar < ivar_eps, test_ivar < ivar_eps), 0.,
+            test_ivar * model_ivar / (test_ivar + model_ivar))
         # fix total_ivar
         test_ivar = np.where(np.isfinite(test_ivar), test_ivar, 0.)
 
@@ -1164,15 +1167,20 @@ class Slam3(object):
             test_ivar, np.zeros_like(test_ivar))
 
         # 5'. take into account model error
-        if model_ivar is not None:
-            # fix model_ivar
-            model_ivar = np.where(
-                np.logical_and(model_ivar > ivar_eps, np.isfinite(model_ivar)),
-                model_ivar, 0.)
-            # calculate total_ivar
-            test_ivar = np.where(
-                np.logical_or(model_ivar < ivar_eps, test_ivar < ivar_eps), 0.,
-                test_ivar * model_ivar / (test_ivar + model_ivar))
+        if model_ivar is None:
+            # using model error
+            mse = -self.training_nmse(1, False)
+            model_ivar = mse**-2.
+        # fix model_ivar
+        model_ivar = np.where(
+            np.logical_and(model_ivar > ivar_eps, np.isfinite(model_ivar)),
+            model_ivar, 0.)
+        # calculate total_ivar
+        test_ivar = np.where(
+            np.logical_or(model_ivar < ivar_eps, test_ivar < ivar_eps), 0.,
+            test_ivar * model_ivar / (test_ivar + model_ivar))
+        # fix total_ivar
+        test_ivar = np.where(np.isfinite(test_ivar), test_ivar, 0.)
 
         # 6. update mask for low ivar pixels
         # test_ivar_threshold = np.array(
