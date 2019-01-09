@@ -51,6 +51,7 @@ class Slam3(object):
     # training data
     wave = np.zeros((0, 0))
     tr_flux = np.zeros((0, 0))
+    tr_flux_rep = np.zeros((0, 0))
     tr_ivar = np.zeros((0, 0))
     tr_labels = np.zeros((0, 0))
     tr_mask = np.zeros((0, 0), bool)
@@ -228,7 +229,7 @@ class Slam3(object):
         """
 
         # initiate Slam
-        s = Slam2(k.wave, k.tr_flux, k.tr_ivar, k.tr_labels)
+        s = Slam3(k.wave, k.tr_flux, k.tr_ivar, k.tr_labels)
 
         # get the __dict__ attribute
         k_keys = k.__dict__.keys()
@@ -1371,9 +1372,15 @@ class Slam3(object):
             return self.tr_flux_scaler.inverse_transform(flux_pred)
 
         return flux_pred
+
+    def replicate_training_flux(self, n_jobs=-1, verbose=False):
+        """ replicate training flux """
+        self.tr_flux_rep = self.predict_spectra_ppixel(
+            self.tr_labels, n_jobs=n_jobs, verbose=verbose)
+        return
     
     def predict_spectra_ppixel(self, X_pred, labels_scaler=True, 
-                               flux_scaler=True, n_jobs=1, verbose=False):
+                               flux_scaler=True, n_jobs=-1, verbose=False):
         """ predict spectra using trained SVRs [paralleled via pixels]
 
         Parameters
