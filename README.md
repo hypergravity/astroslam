@@ -1,7 +1,9 @@
 ## SLAM
 
-Stellar LAbel Machine (SLAM) is a forward model to estimate stellar parameters (e.g., Teff, logg, [Fe/H] and chemical abundances).
-It is based on Support Vector Regression (SVR), which in essential is a non-parametric regression method.
+Stellar LAbel Machine (SLAM) is a forward model to estimate stellar labels (e.g., Teff, logg and chemical abundances).
+It is based on Support Vector Regression (SVR) which is a non-parametric regression method.
+
+For details of **SLAM**, see [Zhang et al. (2019)](https://arxiv.org/abs/1908.08677).
 
 ## Author
 
@@ -25,7 +27,7 @@ Bo Zhang (bozhang@nao.cas.cn)
 - scipy
 - matplotlib
 - astropy
-- sklearn
+- scikit-learn
 - joblib
 - pandas
 - emcee
