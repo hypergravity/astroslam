@@ -724,7 +724,7 @@ class Slam3(object):
         #test_ivar /= np.nansum(test_ivar[mask])
 
         # predict labels
-        X_pred = predict_labels(
+        X_pred = predict_labels3(
             X0, self.sms, test_flux, test_ivar=test_ivar, mask=mask,
             flux_scaler=flux_scaler, labels_scaler=labels_scaler, **kwargs)
 
@@ -811,7 +811,8 @@ class Slam3(object):
 
     def predict_labels_ipc(self, X_init, test_flux, test_ivar, mask=None,
                            profile="default", targets="all", temp_dir=None,
-                           count_size=True, reset=True, *args, **kwargs):
+                           use_old=True, count_size=True, reset=True,
+                           *args, **kwargs):
         """ parallel using ipcluster, make sure there is an ipcluster available
         
         Parameters
@@ -828,6 +829,10 @@ class Slam3(object):
             the targets of remote cluster
         temp_dir:
             temp file directory
+        use_old:
+            if True, skip the "dump and load" process
+        count_size:
+            if True,
         reset
             if True, reset engines
         args, kwargs
@@ -846,31 +851,34 @@ class Slam3(object):
         # force n_jobs = 1 in engines
         kwargs["n_jobs"] = 1
 
-        # initiate ipcluster
-        dv = launch_ipcluster_dv(profile=profile, targets=targets, block=True,
-                                 max_engines=test_flux.shape[0])
+        if use_old:
+            print("@Slam: skipping the *dump & load* process...")
+        else:
+            # initiate ipcluster
+            dv = launch_ipcluster_dv(profile=profile, targets=targets,
+                                     block=True, max_engines=test_flux.shape[0])
 
-        # import modules in ipcluster
-        dv.execute("import os")
-        dv.execute("import tempfile")
-        dv.execute("from joblib import dump, load")
-        dv.execute("from slam.train import train_multi_pixels")
+            # import modules in ipcluster
+            dv.execute("import os")
+            dv.execute("import tempfile")
+            dv.execute("from joblib import dump, load")
+            dv.execute("from slam.train import train_multi_pixels")
 
-        # save Slam instance
-        with NamedTemporaryFile(dir=temp_dir) as f:
-            fp = f.name
-        print("@Slam: saving Slam instance to {} ...".format(fp))
-        self.save_dump(fp, overwrite=True)
+            # save Slam instance
+            with NamedTemporaryFile(dir=temp_dir) as f:
+                fp = f.name
+            print("@Slam: saving Slam instance to {} ...".format(fp))
+            self.save_dump(fp, overwrite=True)
 
-        # estimate size of Slam
-        if count_size:
-            print("@Slam: size of me is about {} MB ".format(
-                os.path.getsize(fp) / 1024 ** 2))
+            # estimate size of Slam
+            if count_size:
+                print("@Slam: size of me is about {} MB ".format(
+                    os.path.getsize(fp) / 1024 ** 2))
 
-        # load Slam instance
-        print("@Slam: loading Slam instance from {} ...".format(fp))
-        dv.execute("from joblib import load")
-        dv.execute("s = load('{}')".format(fp))
+            # load Slam instance
+            print("@Slam: loading Slam instance from {} ...".format(fp))
+            dv.execute("from joblib import load")
+            dv.execute("s = load('{}')".format(fp))
 
         # scatter data
         print("@Slam: scattering & pushing data to engines ...")
