@@ -851,19 +851,19 @@ class Slam3(object):
         # force n_jobs = 1 in engines
         kwargs["n_jobs"] = 1
 
+        # initiate ipcluster
+        dv = launch_ipcluster_dv(profile=profile, targets=targets,
+                                 block=True, max_engines=test_flux.shape[0])
+
+        # import modules in ipcluster
+        dv.execute("import os")
+        dv.execute("import tempfile")
+        dv.execute("from joblib import dump, load")
+        dv.execute("from slam.train import train_multi_pixels")
+
         if use_old:
             print("@Slam: skipping the *dump & load* process...")
         else:
-            # initiate ipcluster
-            dv = launch_ipcluster_dv(profile=profile, targets=targets,
-                                     block=True, max_engines=test_flux.shape[0])
-
-            # import modules in ipcluster
-            dv.execute("import os")
-            dv.execute("import tempfile")
-            dv.execute("from joblib import dump, load")
-            dv.execute("from slam.train import train_multi_pixels")
-
             # save Slam instance
             with NamedTemporaryFile(dir=temp_dir) as f:
                 fp = f.name
