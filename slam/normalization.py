@@ -195,7 +195,7 @@ def normalize_spectrum_iter(wave, flux, p=1E-6, q=0.5, lu=(-1, 1), binwidth=30,
     var = np.ones_like(flux)
 
     # check q region
-    assert 0. <= q <= 1.
+    # assert 0. <= q <= 1.
 
     nbins = np.int(np.ceil((wave[-1] - wave[0]) / binwidth) + 1)
     bincenters = np.linspace(wave[0], wave[-1], nbins)
