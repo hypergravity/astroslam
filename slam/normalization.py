@@ -149,6 +149,80 @@ def normalize_spectrum(wave, flux, norm_range, dwave,
     return flux_norm, flux_smoothed2
 
 
+def normalize_spectrum_iter(wave, flux, p=1E-6, q=0.5, lu=(-1, 1), niter=3):
+    """ A double smooth normalization of a spectrum
+
+    Converted from Chao Liu's normSpectrum.m
+    Updated by Bo Zhang
+
+    Parameters
+    ----------
+    wave: ndarray (n_pix, )
+        wavelegnth array
+    flux: ndarray (n_pix, )
+        flux array
+    p: float
+        smoothing parameter between 0 and 1:
+        0 -> LS-straight line
+        1 -> cubic spline interpolant
+    q: float in range of [0, 100]
+        percentile, between 0 and 1
+    eps: float
+        the ivar threshold
+    lu: float tuple
+        the lower & upper exclusiong limits
+    niter: int
+        number of iterations
+    Returns
+    -------
+    flux_norm: ndarray
+        normalized flux
+    flux_cont: ndarray
+        continuum flux
+
+    Example
+    -------
+    >>> flux_norm, flux_cont = normalize_spectrum(
+    >>>     wave, flux, p=1E-7, q=0.5, lu=(-1, 1), niter=3)
+
+    """
+    if np.sum(np.logical_and(np.isfinite(flux), flux > 0)) <= 10:
+        return normalize_spectrum_null(wave)
+
+    # default config is even weight
+    var = np.ones_like(flux)
+
+    # check q region
+    assert 0. <= q <= 1.
+
+    # iteratively smoothing
+    ind_good = np.ones_like(flux, dtype=bool)
+    for _ in range(niter):
+
+        flux_smoothed1 = SmoothSpline(wave[ind_good], flux[ind_good],
+                                      p=p, var=var[ind_good])(wave)
+        # residual
+        res = flux - flux_smoothed1
+        stdres = 0.5 * np.diff(np.percentile(res, [16, 84]))
+        res1 = (res - np.percentile(res, 100*q)) / stdres
+        ind_good = ind_good & (res1 > lu[0]) & (res1 < lu[1])
+
+        # assert there is continuum pixels
+        try:
+            assert np.sum(ind_good) > 0
+        except AssertionError:
+            Warning("@normalize_spectrum_iter: unable to find continuum!")
+            ind_good = np.ones(wave.shape, dtype=np.bool)
+
+    # final smoothing
+    flux_smoothed2 = SmoothSpline(
+        wave[ind_good], flux[ind_good], p=p, var=var[ind_good])(wave)
+    # normalized flux
+    flux_norm = flux / flux_smoothed2
+
+    return flux_norm, flux_smoothed2
+
+
 def normalize_spectra_block(wave, flux_block, norm_range, dwave,
                             p=(1E-6, 1E-6), q=0.5, ivar_block=None, eps=1e-10,
                             rsv_frac=3., n_jobs=1, verbose=10):
