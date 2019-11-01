@@ -184,8 +184,8 @@ def normalize_spectrum_iter(wave, flux, p=1E-6, q=0.5, lu=(-1, 1), binwidth=30,
 
     Example
     -------
-    >>> flux_norm, flux_cont = normalize_spectrum(
-    >>>     wave, flux, p=1E-7, q=0.5, lu=(-1, 1),  niter=3)
+    >>> fnorm,fcont=normalize_spectrum_iter(
+    >>>     wave, flux, p=1e-6,q=0.6, binwidth=200, lu=(-1,5),niter=niter)
 
     """
     if np.sum(np.logical_and(np.isfinite(flux), flux > 0)) <= 10:
