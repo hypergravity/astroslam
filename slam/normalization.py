@@ -201,7 +201,7 @@ def normalize_spectrum_iter(wave, flux, p=1E-6, q=0.5, lu=(-1, 1), binwidth=30,
     bincenters = np.linspace(wave[0], wave[-1], nbins)
 
     # iteratively smoothing
-    ind_good = np.ones_like(flux, dtype=bool)
+    ind_good = np.isfinite(flux)
     for _ in range(niter):
 
         flux_smoothed1 = SmoothSpline(wave[ind_good], flux[ind_good],
