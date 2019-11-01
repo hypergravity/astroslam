@@ -25,6 +25,7 @@ Aims
 from __future__ import division
 
 import numpy as np
+from scipy.interpolate import interp1d
 from joblib import Parallel, delayed
 
 from .extern.interpolate import SmoothSpline
@@ -149,7 +150,8 @@ def normalize_spectrum(wave, flux, norm_range, dwave,
     return flux_norm, flux_smoothed2
 
 
-def normalize_spectrum_iter(wave, flux, p=1E-6, q=0.5, lu=(-1, 1), niter=3):
+def normalize_spectrum_iter(wave, flux, p=1E-6, q=0.5, lu=(-1, 1), binwidth=30,
+                            niter=5):
     """ A double smooth normalization of a spectrum
 
     Converted from Chao Liu's normSpectrum.m
@@ -167,10 +169,10 @@ def normalize_spectrum_iter(wave, flux, p=1E-6, q=0.5, lu=(-1, 1), niter=3):
         1 -> cubic spline interpolant
     q: float in range of [0, 100]
         percentile, between 0 and 1
-    eps: float
-        the ivar threshold
     lu: float tuple
-        the lower & upper exclusiong limits
+        the lower & upper exclusion limits
+    binwidth: float
+        width of each bin
     niter: int
         number of iterations
     Returns
@@ -183,7 +185,7 @@ def normalize_spectrum_iter(wave, flux, p=1E-6, q=0.5, lu=(-1, 1), niter=3):
     Example
     -------
     >>> flux_norm, flux_cont = normalize_spectrum(
-    >>>     wave, flux, p=1E-7, q=0.5, lu=(-1, 1), niter=3)
+    >>>     wave, flux, p=1E-7, q=0.5, lu=(-1, 1),  niter=3)
 
     """
     if np.sum(np.logical_and(np.isfinite(flux), flux > 0)) <= 10:
@@ -195,6 +197,9 @@ def normalize_spectrum_iter(wave, flux, p=1E-6, q=0.5, lu=(-1, 1), niter=3):
     # check q region
     assert 0. <= q <= 1.
 
+    nbins = np.int(np.ceil((wave[-1] - wave[0]) / binwidth) + 1)
+    bincenters = np.linspace(wave[0], wave[-1], nbins)
+
     # iteratively smoothing
     ind_good = np.ones_like(flux, dtype=bool)
     for _ in range(niter):
@@ -203,8 +208,14 @@ def normalize_spectrum_iter(wave, flux, p=1E-6, q=0.5, lu=(-1, 1), niter=3):
                                       p=p, var=var[ind_good])(wave)
         # residual
         res = flux - flux_smoothed1
-        stdres = 0.5 * np.diff(np.percentile(res, [16, 84]))
-        res1 = (res - np.percentile(res, 100*q)) / stdres
+
+        # determine sigma
+        stdres = np.zeros(nbins)
+        for ibin in range(nbins):
+            ind_this_bin = np.abs(wave-bincenters[ibin]) <= binwidth
+            stdres[ibin] = np.std(res[ind_this_bin])
+        stdres_interp = interp1d(bincenters, stdres, kind="linear")(wave)
+        res1 = (res - np.percentile(res, 100*q)) / stdres_interp
         ind_good = ind_good & (res1 > lu[0]) & (res1 < lu[1])
 
         # assert there is continuum pixels
@@ -350,41 +361,42 @@ def normalize_spectra(wave_flux_tuple_list, norm_range, dwave,
     pass
 
 
-def test_normaliza_spectra_block():
-    import os
-
-    os.chdir('/pool/projects/TheKeenan/data/TheCannonData')
-
-    from TheCannon import apogee
-    import matplotlib.pyplot as plt
-
-    tr_ID, wl, tr_flux, tr_ivar = apogee.load_spectra("example_DR10/Data")
-    tr_label = apogee.load_labels("example_DR10/reference_labels.csv")
-
-    test_ID = tr_ID
-    test_flux = tr_flux
-    test_ivar = tr_ivar
-
-    r = normalize_spectra_block(wl, tr_flux, (15200., 16900.), 30., q=0.9,
-                                rsv_frac=0.5,
-                                p=(1E-10, 1E-10), ivar_block=tr_ivar,
-                                n_jobs=10, verbose=10)
-
-    flux_norm, flux_cont = r
-    flux_norm = np.array(flux_norm)
-    flux_cont = np.array(flux_cont)
-    flux_ivar = tr_ivar * flux_cont ** 2
-
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
-    for i in range(10, 20):
-        ofst = i * 0.5
-        ax.plot(wl, tr_flux[i] + ofst, 'b')
-        ax.plot(wl, flux_cont[i] + ofst, 'r')
-    fig.tight_layout()
-    fig.savefig(
-        '/pool/projects/TheKeenan/data/TheCannonData/test_norm_spec_1.pdf')
+# def test_normaliza_spectra_block():
+#     import os
+#
+#     os.chdir('/pool/projects/TheKeenan/data/TheCannonData')
+#
+#     from TheCannon import apogee
+#     import matplotlib.pyplot as plt
+#
+#     tr_ID, wl, tr_flux, tr_ivar = apogee.load_spectra("example_DR10/Data")
+#     tr_label = apogee.load_labels("example_DR10/reference_labels.csv")
+#
+#     test_ID = tr_ID
+#     test_flux = tr_flux
+#     test_ivar = tr_ivar
+#
+#     r = normalize_spectra_block(wl, tr_flux, (15200., 16900.), 30., q=0.9,
+#                                 rsv_frac=0.5,
+#                                 p=(1E-10, 1E-10), ivar_block=tr_ivar,
+#                                 n_jobs=10, verbose=10)
+#
+#     flux_norm, flux_cont = r
+#     flux_norm = np.array(flux_norm)
+#     flux_cont = np.array(flux_cont)
+#     flux_ivar = tr_ivar * flux_cont ** 2
+#
+#     fig = plt.figure()
+#     ax = fig.add_subplot(111)
+#     for i in range(10, 20):
+#         ofst = i * 0.5
+#         ax.plot(wl, tr_flux[i] + ofst, 'b')
+#         ax.plot(wl, flux_cont[i] + ofst, 'r')
+#     fig.tight_layout()
+#     fig.savefig(
+#         '/pool/projects/TheKeenan/data/TheCannonData/test_norm_spec_1.pdf')
 
 
 if __name__ == '__main__':
-    test_normaliza_spectra_block()
+    pass
+    # test_normaliza_spectra_block()
