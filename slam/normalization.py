@@ -213,10 +213,16 @@ def normalize_spectrum_iter(wave, flux, p=1E-6, q=0.5, lu=(-1, 1), binwidth=30,
         stdres = np.zeros(nbins)
         for ibin in range(nbins):
             ind_this_bin = np.abs(wave-bincenters[ibin]) <= binwidth
-            stdres[ibin] = np.std(
-                res[ind_this_bin] - np.percentile(res[ind_this_bin], 100 * q))
+            if q >= 0:
+                stdres[ibin] = np.std(
+                    res[ind_this_bin] - np.percentile(res[ind_this_bin], 100 * q))
+            else:
+                stdres[ibin] = np.std(res[ind_this_bin])
         stdres_interp = interp1d(bincenters, stdres, kind="linear")(wave)
-        res1 = (res - np.percentile(res, 100*q)) / stdres_interp
+        if q >= 0:
+            res1 = (res - np.percentile(res, 100 * q)) / stdres_interp
+        else:
+            res1 = res / stdres_interp
         ind_good = ind_good & (res1 > lu[0]) & (res1 < lu[1])
 
         # assert there is continuum pixels
