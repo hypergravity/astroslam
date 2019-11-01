@@ -213,13 +213,13 @@ def normalize_spectrum_iter(wave, flux, p=1E-6, q=0.5, lu=(-1, 1), binwidth=30,
         stdres = np.zeros(nbins)
         for ibin in range(nbins):
             ind_this_bin = ind_good & (np.abs(wave-bincenters[ibin]) <= binwidth)
-            if q >= 0:
+            if 0 <= q <= 0:
                 stdres[ibin] = np.std(
                     res[ind_this_bin] - np.percentile(res[ind_this_bin], 100 * q))
             else:
                 stdres[ibin] = np.std(res[ind_this_bin])
         stdres_interp = interp1d(bincenters, stdres, kind="linear")(wave)
-        if q >= 0:
+        if 0 <= q <= 1:
             res1 = (res - np.percentile(res, 100 * q)) / stdres_interp
         else:
             res1 = res / stdres_interp
