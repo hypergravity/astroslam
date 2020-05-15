@@ -809,9 +809,34 @@ class Slam3(object):
 
         return X_quick
 
+    def push_to_ipc(self, profile="default", targets="all", block=True,
+                    max_engines=None, temp_dir="/tmp/", count_size=True):
+        # init ipc
+        dv = launch_ipcluster_dv(profile=profile, targets=targets, block=block,
+                                 max_engines=max_engines)
+
+        # save Slam instance
+        with NamedTemporaryFile(dir=temp_dir) as f:
+            fp = f.name
+        print("@Slam: saving Slam instance to {} ...".format(fp))
+        self.save_dump(fp, overwrite=True)
+
+        # estimate size of Slam
+        if count_size:
+            print("@Slam: size of me is about {} MB ".format(
+                os.path.getsize(fp) / 1024 ** 2))
+
+        # load Slam instance
+        print("@Slam: loading Slam instance from {} ...".format(fp))
+        dv.execute("from joblib import load")
+        dv.execute("s = load('{}')".format(fp))
+
+        os.remove(fp)
+        return
+
     def predict_labels_ipc(self, X_init, test_flux, test_ivar, mask=None,
                            profile="default", targets="all", temp_dir=None,
-                           use_old=True, count_size=True, reset=True,
+                           use_old=True, count_size=True, reset=False,
                            *args, **kwargs):
         """ parallel using ipcluster, make sure there is an ipcluster available
         
@@ -823,6 +848,8 @@ class Slam3(object):
             flux array
         test_ivar:
             ivar array
+        mask:
+            mask array
         profile:
             ipcluster profile
         targets:
@@ -879,6 +906,9 @@ class Slam3(object):
             print("@Slam: loading Slam instance from {} ...".format(fp))
             dv.execute("from joblib import load")
             dv.execute("s = load('{}')".format(fp))
+
+            # remove temp file
+            os.remove(fp)
 
         # scatter data
         print("@Slam: scattering & pushing data to engines ...")
@@ -1626,7 +1656,7 @@ class Slam3(object):
 
     @staticmethod
     def heal_the_world(flux, ivar, labels=None, mask_conv=(1, 2),
-                       flux_bounds=(1e-3, 1e2), ivar_eps=1e0):
+                       flux_bounds=(1e-3, 1e2), ivar_eps=1e0, silent=True):
         """ heal the flux, ivar and label array
         
         Parameters
