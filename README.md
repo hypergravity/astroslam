@@ -26,6 +26,10 @@ Bo Zhang (bozhang@nao.cas.cn)
 - for Zenodo version
   - [https://zenodo.org/record/3461504](https://zenodo.org/record/3461504)
 
+## Tutorial
+A simple guide to SLAM can be accessed [here](https://pan.baidu.com/s/11UMqkUVPawRnCAB95vwIDQ) with token `gkvi`.
+If you are interested in SLAM or have any related questions, do not hesitate to contact me.
+
 ## Requirements
 - numpy
 - scipy
