@@ -206,7 +206,7 @@ def predict_labels3(X0, svrs, test_flux, test_ivar=None, mask=None,
     if ivar_scaler is not None:
         test_ivar = ivar_scaler.transform(test_ivar.reshape(1, -1)).flatten()
 
-    ls_r = least_squares(costfun_for_label, X0, method="lm",
+    ls_r = least_squares(costfun_for_label, X0, method="trf", loss="soft_l1",
                          args=(svrs, test_flux, test_ivar, mask), **kwargs)
     pp_r = do_post(ls_r, labels_scaler)
 
