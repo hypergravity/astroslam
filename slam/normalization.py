@@ -30,6 +30,8 @@ from joblib import Parallel, delayed
 
 from .extern.interpolate import SmoothSpline
 
+print("slam.normalization module will be deprecated in future")
+
 
 def normalize_spectrum_null(wave):
     return np.ones_like(wave)*np.nan, np.ones_like(wave)*np.nan
