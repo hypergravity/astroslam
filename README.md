@@ -20,9 +20,9 @@ Bo Zhang (bozhang@nao.cas.cn)
 
 ## Install
 - for the latest **stable** version:
-  - `pip install astroslam`
+  - `pip install -U astroslam`
 - for the latest **github** version:
-  - `pip install git+git://github.com/hypergravity/astroslam`
+  - `pip install -U git+git://github.com/hypergravity/astroslam`
 - for Zenodo version
   - [https://zenodo.org/record/3461504](https://zenodo.org/record/3461504)
 
