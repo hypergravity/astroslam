@@ -54,6 +54,7 @@ def standardize(X, weight=None, robust=False):
     n_good = np.sum(ind_good, axis=0)
 
     scaler = preprocessing.StandardScaler()
+    scaler.fit(X)
     n_col = X.shape[1]
 
     scaler.scale_ = np.ones((n_col,), float)
