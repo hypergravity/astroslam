@@ -237,7 +237,7 @@ def train_single_pixel_mini(X, y, sample_weight=None, cv=10, **kwargs):
 
 def train_multi_pixels(X, ys, sample_weights, model="nn", method="grid",
                        param_grid=None, cv=8, scoring="neg_mean_squared_error",
-                       n_jobs=1, verbose=10, **kwargs):
+                       n_jobs=1, verbose=10, backend="multiprocessing", **kwargs):
     """ train multi pixels
 
     Parameters
@@ -262,6 +262,8 @@ def train_multi_pixels(X, ys, sample_weights, model="nn", method="grid",
         number of processes that will be launched by joblib
     verbose: int
         the same as joblib.Parallel() parameter verbose
+    backend:
+        joblib backend
     kwargs:
         extra kwargs will be passed to svm.SVR() method
 
@@ -285,7 +287,7 @@ def train_multi_pixels(X, ys, sample_weights, model="nn", method="grid",
                        cv=cv,
                        scoring=scoring))
 
-    results = Parallel(n_jobs=n_jobs, verbose=verbose)(
+    results = Parallel(n_jobs=n_jobs, verbose=verbose, backend=backend)(
         delayed(SlamModel.train)(*this_data, **kwargs) for this_data in data)
 
     # return results

@@ -198,10 +198,10 @@ class Slam3(object):
         return self._total_size
 
     # this is slow but gets you the size of every attribute
-        def size(self, unit='mb', verbose=False,
-                 key_removed=["size", "size_total_mb"]):
-            return sizeof(self, unit=unit, verbose=verbose,
-                          key_removed=key_removed)
+    def size(self, unit='mb', verbose=False,
+             key_removed=["size", "size_total_mb"]):
+        return sizeof(self, unit=unit, verbose=verbose,
+                      key_removed=key_removed)
 
     @staticmethod
     def init_from_keenan(k):
@@ -488,7 +488,7 @@ class Slam3(object):
                      sample_weight_scheme="bool",
                      model="nn", method="simple", param_grid=None, cv=8,
                      scoring="neg_mean_squared_error",
-                     n_jobs=10, verbose=10, **kwargs):
+                     n_jobs=10, verbose=10, backend="multiprocessing", **kwargs):
         """ train pixels usig SVR
 
         Parameters
@@ -513,6 +513,8 @@ class Slam3(object):
             number of jobs that will be launched simultaneously
         verbose:
             verbose level
+        backend:
+            joblib backend
         **kwargs:
             will be passed to the svr.fit() method
 
@@ -562,6 +564,7 @@ class Slam3(object):
                 scoring=scoring,
                 n_jobs=n_jobs,
                 verbose=verbose,
+                backend=backend,
                 **kwargs)
 
             # clear & store new results
