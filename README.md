@@ -27,8 +27,9 @@ Bo Zhang (bozhang@nao.cas.cn)
   - [https://zenodo.org/record/3461504](https://zenodo.org/record/3461504)
 
 ## Tutorial
-A simple guide to SLAM can be accessed [here](https://pan.baidu.com/s/11UMqkUVPawRnCAB95vwIDQ) with token `gkvi`.
-If you are interested in SLAM or have any related questions, do not hesitate to contact me.
+[updated on 2020-12-02]
+- A new SLAM tutorial can be found [here](https://nbviewer.jupyter.org/github/hypergravity/spectroscopy/blob/main/stellar_parameters/demo_slam/demo_slam.ipynb)
+- If you are interested in SLAM or have any related questions, do not hesitate to contact me.
 
 ## Requirements
 - numpy
