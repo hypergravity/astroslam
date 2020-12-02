@@ -98,7 +98,7 @@ def predict_spectrum(svrs, X_, mask=None, scaler=None):
     # print('number of true mask: ', np.sum(mask))
     # print('mask len: ', mask.shape)
     ys = [predict_pixel(svr, X_, mask_) for svr, mask_ in zip(svrs, mask)]
-    ys = np.array(ys).T
+    ys = np.array(ys, dtype=float).T
 
     return ys
 
