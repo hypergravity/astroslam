@@ -4,12 +4,7 @@ Stellar LAbel Machine (SLAM) is a forward model to estimate stellar labels (e.g.
 It is based on Support Vector Regression (SVR) which is a non-parametric regression method.
 
 For details of **SLAM**, see [Deriving the stellar labels of LAMOST spectra with Stellar LAbel Machine (SLAM)](https://ui.adsabs.harvard.edu/abs/2020ApJS..246....9Z/abstract).
-
-**Related Projects**
-1. [Exploring the spectral information content in the LAMOST medium-resolution survey (MRS)](https://ui.adsabs.harvard.edu/abs/2020RAA....20...51Z/abstract) 
-2. [Tracing Kinematic and Chemical Properties of Sagittarius Stream by K-Giants, M-Giants, and BHB stars](https://ui.adsabs.harvard.edu/abs/2019ApJ...886..154Y/abstract)
-3. [On the Chemical and Kinematic Consistency between N-rich Metal-poor Field Stars and Enriched Populations in Globular Clusters](https://ui.adsabs.harvard.edu/abs/2020ApJ...891...28T/abstract)
-4. [Exploring the Perturbed Milky Way Disk and the Substructures of the Outer Disk](https://ui.adsabs.harvard.edu/abs/2020ApJ...905....6X/abstract)
+Related projects: click [here](https://ui.adsabs.harvard.edu/abs/2020ApJS..246....9Z/citations).
 
 ## Author
 
