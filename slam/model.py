@@ -172,7 +172,7 @@ class SlamModel(object):
                     self.score_ = self.cross_val_score(X_, y_)
 
             else:
-                self.regressor.fit(X_, y_, weight_)
+                self.regressor.fit(X_, y_, sample_weight=weight_)
 
                 if self.method == "grid":
                     self.score_ = self.regressor.best_score_

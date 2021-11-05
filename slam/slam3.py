@@ -486,7 +486,7 @@ class Slam3(object):
 
     def train_pixels(self, profile=None, targets="all", temp_dir=None,
                      sample_weight_scheme="bool",
-                     model="nn", method="simple", param_grid=None, cv=8,
+                     model="svr", method="simple", param_grid=None, cv=8,
                      scoring="neg_mean_squared_error",
                      n_jobs=10, verbose=10, backend="multiprocessing", **kwargs):
         """ train pixels usig SVR
