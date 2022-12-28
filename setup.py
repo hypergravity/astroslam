@@ -19,7 +19,7 @@ setuptools.setup(
                  "Intended Audience :: Science/Research",
                  "License :: OSI Approved :: MIT License",
                  "Operating System :: OS Independent",
-                 "Programming Language :: Python :: 3.7",
+                 "Programming Language :: Python :: 3.9",
                  "Topic :: Scientific/Engineering :: Physics",
                  "Topic :: Scientific/Engineering :: Astronomy"],
     package_dir={'slam': 'slam',
