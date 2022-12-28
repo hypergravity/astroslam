@@ -26,6 +26,16 @@ setuptools.setup(
                  'extern': 'slam/extern'},
     package_data={'slam': ['data/*.csv']},
     # include_package_data=True,
-    requires=['numpy', 'scipy', 'matplotlib', 'astropy', 'sklearn', 'joblib',
-              'pandas', 'emcee', 'lmfit', 'ipyparallel']
+    install_requires=[
+        'numpy',
+        'scipy',
+        'matplotlib',
+        'astropy',
+        'scikit-learn==1.2.0',
+        'joblib==1.2.0',
+        'pandas',
+        'emcee',
+        'lmfit',
+        'ipyparallel'
+    ]
 )
