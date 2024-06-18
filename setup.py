@@ -32,7 +32,7 @@ setuptools.setup(
         'matplotlib',
         'astropy',
         'laspec',
-        'scikit-learn==1.2.0',
+        'scikit-learn==1.5.0',
         'joblib==1.2.0',
         'pandas',
         'emcee',
