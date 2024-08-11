@@ -23,7 +23,8 @@ Aims
 
 """
 import sys
-from collections import OrderedDict, Set, Mapping, deque
+from collections import OrderedDict, deque
+from collections.abc import Mapping
 from numbers import Number
 
 import numpy as np
@@ -212,7 +213,7 @@ def sizeof(obj, unit='mb', verbose=False, key_removed=None):
 
     v_dict['_total'] = np.sum([v_dict[_] for _ in v_dict.keys()])
     for k in v_dict.keys():
-        v_dict[k] = np.int(scale * v_dict[k])
+        v_dict[k] = int(scale * v_dict[k])
 
     v_dict['_unit'] = unit
 
