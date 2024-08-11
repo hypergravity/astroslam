@@ -535,7 +535,7 @@ class Slam3(object):
 
         elif sample_weight_scheme is "bool":
             # 0|1 scheme for training flux (recommended)
-            sample_weight = self.tr_mask.astype(np.float)
+            sample_weight = self.tr_mask.astype(float)
             ind_all_bad = np.sum(sample_weight, axis=0) < 1.
             for i_pix in np.arange(sample_weight.shape[1]):
                 if ind_all_bad[i_pix]:
@@ -717,11 +717,11 @@ class Slam3(object):
 
         # mask default
         if mask is None:
-            mask = np.ones_like(test_flux, dtype=np.bool)
+            mask = np.ones_like(test_flux, dtype=bool)
 
         # test_ivar default
         if test_ivar is None:
-            test_ivar = np.ones_like(test_flux, dtype=np.float)
+            test_ivar = np.ones_like(test_flux, dtype=float)
 
         # test_ivar normalization --> unnecessary
         #test_ivar /= np.nansum(test_ivar[mask])
@@ -1021,7 +1021,7 @@ class Slam3(object):
         # mask must be set here!
         if mask is None:
             # no mask is set
-            mask = np.ones_like(test_flux, dtype=np.bool)
+            mask = np.ones_like(test_flux, dtype=bool)
         elif mask.ndim == 1 and len(mask) == test_flux.shape[1]:
             # if only one mask is specified
             mask = np.array([mask for _ in range(n_test)])
@@ -1031,7 +1031,7 @@ class Slam3(object):
         # test_ivar must be set here!
         if test_ivar is None:
             # test_ivar=None, directly set test_ivar
-            test_ivar = np.ones_like(test_flux, dtype=np.float)
+            test_ivar = np.ones_like(test_flux, dtype=float)
         # test_ivar is not None
         elif ivar_scaler is not None:
             # do scaling for test_ivar
@@ -1185,7 +1185,7 @@ class Slam3(object):
         # mask must be set here!
         if mask is None:
             # no mask is set
-            mask = np.ones_like(test_flux, dtype=np.bool)
+            mask = np.ones_like(test_flux, dtype=bool)
         elif mask.ndim == 1 and len(mask) == test_flux.shape[1]:
             # if only one mask is specified
             mask = np.array([mask for _ in range(n_test)])
@@ -1194,7 +1194,7 @@ class Slam3(object):
         # test_ivar must be set here!
         if test_ivar is None:
             # test_ivar=None, directly set test_ivar
-            test_ivar = np.ones_like(test_flux, dtype=np.float)
+            test_ivar = np.ones_like(test_flux, dtype=float)
         # test_ivar is not None
         elif ivar_scaler is not None:
             # do scaling for test_ivar
@@ -1227,7 +1227,7 @@ class Slam3(object):
         # test_ivar_threshold = np.array(
         #     [np.median(_[_ > 0]) * 0.05 for _ in test_ivar]).reshape(-1, 1)
         # mask = np.where(test_ivar < test_ivar_threshold,
-        #                 np.zeros_like(mask, dtype=np.bool), mask)
+        #                 np.zeros_like(mask, dtype=bool), mask)
         #
         # This is NON-PHYSICAL !
         # Since the test_ivar is SCALED, could not cut 0.05 median!
@@ -1576,7 +1576,7 @@ class Slam3(object):
                                (self.tr_flux > 0.) *
                                np.isfinite(self.tr_ivar) *
                                np.isfinite(self.tr_flux))
-            sample_weight = ind_good_pixels.astype(np.float)
+            sample_weight = ind_good_pixels.astype(float)
             r = Parallel(n_jobs=n_jobs, verbose=verbose)(delayed(nmse)(
                 self.sms[i], self.tr_labels_scaled, self.tr_flux_scaled[:, i],
                 sample_weight[:, i]) for i in range(self.n_pix))
